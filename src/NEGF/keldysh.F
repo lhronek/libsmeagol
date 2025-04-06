@@ -29,7 +29,7 @@
       subroutine keldyshReal(N1,NSpinBlocks,NspinComplexMatrix,NL,NR,nk,
      &    ik,V,T,Delta,ef,rhobs_general,ematbs_general,
      &    hgeneralp,sgeneralp,rhogeneralp,ematgeneralp,
-     &    iter,ldos,weightrho)
+     &    iter,ldos,weightrho, rho_real_l, rho_real_r)
 
 ! *****************************************************************
 ! Calculates the Keldysh Green's function on the real axis
@@ -105,7 +105,6 @@
       type(matrixTypeGeneral) :: hgeneralp(NspinComplexMatrix),
      &    sgeneralp,rhogeneralp(NspinComplexMatrix),
      &    ematgeneralp(NspinComplexMatrix)
-      double complex, allocatable :: b(:)
       double complex, allocatable :: bnc(:,:)
       type(matrixTypeGeneral), allocatable :: sigmamp(:)
       type(matrixTypeGeneral), allocatable :: gammamp(:)
@@ -121,13 +120,20 @@
       logical ldos
       type(SelfEnergyType), allocatable :: sigmaleads(:)
       integer iend
+      double complex, intent(inout) ::
+     &       rho_real_l(NspinComplexMatrix,
+     &                 ERealGrid%nEnergies,
+     &                 rhogeneralp(1)%matSparse%nnz)
+      double complex, intent(inout) ::
+     &       rho_real_r(NspinComplexMatrix,
+     &                 ERealGrid%nEnergies,
+     &                 rhogeneralp(1)%matSparse%nnz)
 
       io%isDebug=.false.
       if(emtimings)then
         CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
         CALL SYSTEM_CLOCK(sca_0,sc_r,sc_m)
       endif
-     
 
       if(.not.negfon)then
         gfmattype=0 !for dense GF matrix
@@ -283,7 +289,6 @@
         CALL SYSTEM_CLOCK(sca_0,sc_r,sc_m)
       endif
 
-  
       DO ISPIN=1,ERealGrid%nSpin
 
         inde=0
@@ -329,14 +334,8 @@
           endif
 
 ! *****************************************************************
-
-
-
-
-
 !  Calculate the Keldysh Greens function
           
-
 !          CALL TIMER('gfinv',1)
           if(emtimings)then
             CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
@@ -663,7 +662,9 @@
               CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
             endif
 
-
+! ********  **********************************************************
+! Calculate the "out of equilibrium" contribution to the charge for the
+! left lead
 
             ALLOCATE(gf1(NL,N1),gf2(NL,N1))
 
@@ -692,8 +693,6 @@
 
 
             if(NspinComplexMatrix<=2)then
-              allocate(b(rhogeneralp(1)%matSparse%nnz))
-              b=0.0D0
               if(emtimings)then
                 CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
                 write(12347,'(A,f12.6)')
@@ -704,8 +703,8 @@
               call UpdateRhoNEQ(rhogeneralp(1)%matSparse%nnz,n1,nl,nr,
      &            nl,
      &            rhogeneralp(1)%matSparse%q,rhogeneralp(1)%matSparse%j,
-     &            b(:),gf1,gf2,
-     &            weightrho * (1.D0,0D0)/(2.D0*PI)*ERealGrid%w(I),
+     &            rho_real_l(ISPIN, I, :),gf1,gf2,
+     &            (1.D0,0D0)/(2.D0*PI)*ERealGrid%w(I),
      &            .false.)
 
               if(emtimings)then
@@ -714,10 +713,6 @@
      $               'kr_copyrhoy5',(scb_1-scb_0)*1.0d0/sc_r
                 CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
               endif
-
-
-              rhogeneralp(ispin)%matSparse%b(:)=
-     &            rhogeneralp(ispin)%matSparse%b(:)+b(:)
           
               if(emtimings)then
                 CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
@@ -725,9 +720,6 @@
      $               'kr_copyrhoy6',(scb_1-scb_0)*1.0d0/sc_r
                 CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
               endif
-              if(emforces)
-     &            ematgeneralp(ispin)%matSparse%b(:)=
-     &            ematgeneralp(ispin)%matSparse%b(:)+Ei * b(:)
 
               if(emtimings)then
                 CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
@@ -735,7 +727,6 @@
      $               'kr_copyrhoy7',(scb_1-scb_0)*1.0d0/sc_r
                 CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
               endif
-              deallocate(b)
 
             else
               allocate(bnc(rhogeneralp(1)%matSparse%nnz,
@@ -745,7 +736,7 @@
      &          nl/2,nr/2,nl,
      &          rhogeneralp(1)%matSparse%q,rhogeneralp(1)%matSparse%j,
      &          bnc(:,1),bnc(:,2), bnc(:,3),bnc(:,4), gf1,gf2,
-     &          weightrho * (1.D0,0D0)/(2.D0*PI)*ERealGrid%w(I),
+     &           weightrho* (1.D0,0D0)/(2.D0*PI)*ERealGrid%w(I),
      &          .false.)
 
               do is=1,NspinComplexMatrix
@@ -826,7 +817,7 @@
 
 ! ********  **********************************************************
 ! Calculate the "out of equilibrium" contribution to the charge for the
-! left lea  d
+! right lead
 
             ALLOCATE(gf1(NR,N1),gf2(NR,N1))
 
@@ -854,8 +845,6 @@
 
 
             if(NspinComplexMatrix<=2)then
-              allocate(b(rhogeneralp(1)%matSparse%nnz))
-              b=0.0D0
 
               if(emtimings)then
                 CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
@@ -863,11 +852,12 @@
      $               'kr_copyrhox4',(scb_1-scb_0)*1.0d0/sc_r
                 CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
               endif
+
               call UpdateRhoNEQ(rhogeneralp(1)%matSparse%nnz,n1,
      &            nl,nr,nr,
      &            rhogeneralp(1)%matSparse%q,rhogeneralp(1)%matSparse%j,
-     &            b(:),gf1,gf2,
-     &            (1D0 - weightrho) *(1.D0,0D0)/(2.D0*PI)*ERealGrid%w(I)
+     &            rho_real_r(ISPIN, I, :),gf1,gf2,
+     &            (1.D0,0D0)/(2.D0*PI)*ERealGrid%w(I)
      &            ,.false.)
               if(emtimings)then
                 CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
@@ -875,31 +865,6 @@
      $               'kr_copyrhox5',(scb_1-scb_0)*1.0d0/sc_r
                 CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
               endif
-
-
-              rhogeneralp(ispin)%matSparse%b(:)=
-     &            rhogeneralp(ispin)%matSparse%b(:)+b(:)
- 
-              if(emtimings)then
-                CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
-                write(12347,'(A,f12.6)')
-     $               'kr_copyrhox6',(scb_1-scb_0)*1.0d0/sc_r
-                CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
-              endif
-              if(emforces)
-     &            ematgeneralp(ispin)%matSparse%b(:)=
-     &            ematgeneralp(ispin)%matSparse%b(:)+Ei * b(:)
-
-              if(emtimings)then
-                CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
-                write(12347,'(A,f12.6)')
-     $               'kr_copyrhox7',(scb_1-scb_0)*1.0d0/sc_r
-                CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
-              endif
-
-              deallocate(b)
-
-
 
             else
               allocate(bnc(rhogeneralp(1)%matSparse%nnz,
@@ -943,148 +908,8 @@
           enddo
           deallocate(sigmaleads)
 
-        enddo
-
-      enddo
-
-      if(emtimings)then
-        CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
-        write(12347,'(A,f12.6)')
-     $       'kr_time2',(scb_1-sca_0)*1.0d0/sc_r
-        CALL SYSTEM_CLOCK(sca_0,sc_r,sc_m)
-      endif
-
- 
-
-      if(mynode_inverse.eq.0.and.bs_add.and.bs_method.eq.1)then
-        call DestroyMatrixGeneral(gfgeneral,"keldyshreal",io)
-      endif
-
-      if(emtimings)then
-        CALL SYSTEM_CLOCK(sc_1,sc_r,sc_m)
-        write(12347,'(A,f12.6)')
-     $       'kr_outeneloop',(sc_1-sc_0)*1.0d0/sc_r
-        CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
-      endif
-
-
-      if(mynode_inverse.eq.0)then
-        if((bs_add).and.(bs_method.eq.1))then
-
-          do i1=1,nbss
-            call DestroyMatrixGeneral(gammamp(i1),"keldyshreal",io)
-            call DestroyMatrixGeneral(sigmamp(i1),"keldyshreal",io)
-          enddo
-          deallocate(gammamp,sigmamp)
-
-          if(bssc.eq.0)then
-
-            if(ik.eq.nk)then
-              do i1=1,nleads
-                if(NspinComplexMatrix.eq.1)then
-                  write(12347,*)"efib_bssuse=",i1,13.6057D0 * 
-     .                (ef_bss(i1,1)-ef),ik
-                else
-                  write(12347,*)"efib_bssuse=",i1,13.6057D0 * 
-     .                (ef_bss(i1,1)-ef),13.6057D0 * 
-     .                (ef_bss(i1,2)-ef),ik
-                endif
-              enddo
-            endif
-
-            call transm_probes_tot(ef_bss,tij,wkmod,nleads,nbss,
-     .      NspinComplexMatrix,
-     .      ERealGrid%nEnergies,ik,nk,v,kb * t,ef)
-
-            if(ik.eq.nk)then
-
-              if(myhead.eq.0)then
-                open(12349,file='DM.EF.dat')
-                do ispin=1,NspinComplexMatrix
-                  do i1=1,nleads
-                    write(12349,'(f15.10,A3)',ADVANCE='NO')
-     .                 13.6057D0 *(ef_bss(i1,ispin)-ef), "   "
-                  enddo
-                  write(12349,*)
-                enddo
-                close(12349)
-              endif
-              
-              do i1=1,nleads
-                if(NspinComplexMatrix.eq.1)then
-                  write(12347,*)"efi_bssuse=",i1,13.6057D0 * 
-     .                (ef_bss(i1,1)-ef),ik
-                else
-                  write(12347,*)"efi_bssuse=",i1,13.6057D0 * 
-     .                (ef_bss(i1,1)-ef),13.6057D0 * 
-     .                (ef_bss(i1,2)-ef),ik
-                endif
-              enddo
-            endif
-
-
-
-            if(bs_writetrc)
-     .          call bs_transm(ef_bssk,ef_bss,NspinComplexMatrix,
-     .          ERealGrid%nEnergies,V,ik,nk,nleads,nbss,ef,kb * T,
-     .          nebss,tij,wkmod)
-          endif
-          deallocate(ef_bssk,nebss,deltabss,tij)
-        endif
-
-        if(bs_add) deallocate(Tau1_aux)
-        deallocate(IPIV)
-        deallocate(zv,work3,rwork2)
-        deallocate(GF_iter1r,gammar,sigmar)
-        deallocate(GF_iter1l,gammal,sigmal)
-        deallocate(GF_iter2l)
-        deallocate(GF_iter2r)
-        deallocate(GF_iter3)
-
-! ####  ### calculate bound states from eigenvalues #########
-
-        if((bs_add).and.(bs_method.eq.0))then
-
-          if(.not.ALLOCATED(rhobs_delta))
-     &        ALLOCATE(rhobs_delta(N1,N1,NspinComplexMatrix))
-          if(MOD(itermod-1,bsskip) .EQ. 0) then
-            CALL TIMER('bssel',1)
-
-            rhobs_delta=0D0
-            call bs_m0(ERealGrid%nEnergiesGlobal,N1,NspinComplexMatrix,
-     &          ERealGrid%nEnergies,ik,nk,NL,NR,
-     &          V,ef,T,H0_L,
-     &          H1_L,S0_L,S1_L,H0_R, H1_R,S0_R,S1_R, deltaimag,
-     &          hdense,sdense,sdense_inv,
-     &          delta,rhobs_delta,eiene,ene,indemax,wkmod)
-            if(bsskip.gt.1) rhobstot(:,:,:,ik)=rhobs_delta
-
-            CALL TIMER('bssel',2)
-          else
-            rhobs_delta=rhobstot(:,:,:,ik)
-          endif
-
-        endif
-        if(bs_add.and.bs_method.eq.0)then
-          deallocate(hdense,sdense)
-        endif
-        if(allocated(ef_bss))deallocate(ef_bss)
-        if(emtimings)then
-          CALL SYSTEM_CLOCK(sc_1,sc_r,sc_m)
-          write(12347,'(A,f12.6)')
-     $         'kr_finalizing',(sc_1-sc_0)*1.0d0/sc_r
-        endif
-      endif
-      if(emtimings)then
-        CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
-        write(12347,'(A,f12.6)')
-     $       'kr_time3',(scb_1-sca_0)*1.0d0/sc_r
-        CALL SYSTEM_CLOCK(sca_0,sc_r,sc_m)
-      endif
-
-
-
-! ####### end calculate bound states from eigenvalues #########
+        enddo ! DO ISPIN=1,ERealGrid%nSpin
+      enddo ! DO I=1,ERealGrid%nEnergies
 
       end subroutine keldyshReal
 
@@ -1093,7 +918,7 @@
      &    NL,NR,ik,iter,
      &    NEnerg1,NEnerg2,NPOLES,R0,
      &    V,T,ef, hgeneralp,sgeneralp,rhogeneralp,ematgeneralp,
-     &    weightrho)
+     &    weightrho, rho_im_l, rho_im_r, rho_f_im_l, rho_f_im_r)
 
 ! *****************************************************************
 ! Calculates the Keldysh Green's function on the complex plane
@@ -1134,7 +959,7 @@
 
       INTEGER, DIMENSION (:), ALLOCATABLE :: IPIV 
       
-      DOUBLE PRECISION :: ef,V,T,R0
+      DOUBLE PRECISION :: ef,V,T,R0, const
       
       DOUBLE COMPLEX :: CONSTR,CONSTL,drhoij
       
@@ -1145,9 +970,25 @@
       type(matrixTypeGeneral) :: hgeneralp(NspinComplexMatrix),
      .    sgeneralp,rhogeneralp(NspinComplexMatrix),
      .    ematgeneralp(NspinComplexMatrix)
+       double complex, intent(inout) ::
+     &       rho_f_im_l(NspinComplexMatrix,
+     &                 EImagGrid%nEnergies,
+     &                 rhogeneralp(1)%matSparse%nnz)
+      double complex, intent(inout) ::
+     &       rho_f_im_r(NspinComplexMatrix,
+     &                 EImagGrid%nEnergies,
+     &                 rhogeneralp(1)%matSparse%nnz)
+            double complex, intent(inout) ::
+     &       rho_im_l(NspinComplexMatrix,
+     &                 EImagGrid%nEnergies,
+     &                 rhogeneralp(1)%matSparse%nnz)
+      double complex, intent(inout) ::
+     &       rho_im_r(NspinComplexMatrix,
+     &                 EImagGrid%nEnergies,
+     &                 rhogeneralp(1)%matSparse%nnz)
       type(ioType) :: io
       integer  nnzrow(n1),sizeSigma
-      double precision deltag,dsigma
+      double precision deltag,dsigma, Ei
       double complex gfij,gfji,gfij2,gfji2,ener_sigma
       double complex, allocatable :: rhobuf(:)
 
@@ -1157,8 +998,6 @@
       integer*4:: sc_0,sc_1,sc_r,sc_m
       INTEGER :: MPIerror
       logical writeGFHSheader
-     
-      
 
       if(.not.negfon)then
         gfmattype=0 !for dense GF matrix
@@ -1179,9 +1018,8 @@
 
       NenergImNode=EImagGrid%nEnergies
       DO ISPIN=1,EImagGrid%nSpin
-
-
         DO I=1,EImagGrid%nEnergies
+
 !          write(12347,*)"ie=",i,ispin,n1
             
           if(emtimings)CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
@@ -1494,26 +1332,31 @@
           enddo
           deallocate(sigmaleads)
 
-
-
-!          CALL TIMER('gfinvi',2)
-
+      ! Calculate imaginary contour component of density (rhogeneralp)
           if(mynode_inverse.eq.0)then
-          
-            call updaterho_nc(rhogeneralp,ematgeneralp,emforces,ispin,
-     .          NspinComplexMatrix,gf, nl,nr,gfmattype, 
-     .          EImagGrid%w(i),constl,constr,weightrho,EImagGrid%e(i),
-     .          .false.)
 
-      if(.false.)then
+      ! Calculate imaginary contour along left
+          const = 1.0D0
+          call updaterho_nc(rhogeneralp,rho_im_l(ispin, I, :),
+     &           rho_f_im_l(ispin, I, :), emforces,
+     &          ispin, NspinComplexMatrix,gf, nl,nr,gfmattype,
+     &          EImagGrid%w(i),constl,const,EImagGrid%e(i),
+     &          .false.)
+
+      ! Calculate imaginary contour along right
+          const = 1.0D0
+          call updaterho_nc(rhogeneralp,rho_im_r(ispin, I, :),
+     &           rho_f_im_r(ispin, I, :), emforces,
+     &           ispin, NspinComplexMatrix,gf, nl,nr,gfmattype,
+     &           EImagGrid%w(i),constr,const,EImagGrid%e(i),
+     &           .false.)
+
+
+       if(.false.)then
         call PrintSparse2DenseReorderedNC(rhogeneralp,n1/2,
      .      NspinComplexMatrix, NSpinBlocks, NspinComplexMatrix,1,
      .      "rhok_5")
-      endif
-
-
-
-
+       endif
 
 
             if(emtimings)then
@@ -1526,32 +1369,23 @@
             call DestroyMatrixGeneral(gf,"keldyshimag2",io)
             call DestroyMatrixGeneral(gfserial,"keldyshimag2",io)
 ! end allocating sparse matrix
-          endif
+          endif ! if(mynode_inverse.eq.0)then
+
           if(nprocs_hs.ne.1)
      &        call DestroyMatrixGeneral(gfP,"keldyshimag",io)
 
 !          write(12347,*)"iee=",i,ispin,n1
-        ENDDO
+
+
+        ENDDO !   DO ISPIN=1,EImagGrid%nSpin
 
         if(ComputeImpurityGfMatsubara)then
-
-!          if(.true.)then
-!            allocate(rhobuf(rhogeneralp(ispin)%matSparse%nnz))
-!            CALL MPI_REDUCE(rhogeneralp(ispin)%matSparse%b(1),
-!     &          rhobuf,
-!     &          rhogeneralp(ispin)%matSparse%nnz, DAT_dcomplex,MPI_SUM,
-!     &          0,inverseheads_comm,MPIerror)
-!            rhogeneralp(ispin)%matSparse%b=rhobuf
-!            deallocate(rhobuf)
-!          endif
           if(myhead==0)
      &     call AddRhoTilde(rhogeneralp(ispin),gfmattype, nl,nr,.false.)
-
-!          call MPI_Barrier(inverseheads_comm,MPIerror)
-!          call stopnegf
         endif
 
-      ENDDO
+      ENDDO !  DO I=1,EImagGrid%nEnergies
+
 
       if(CallImpuritySolver)then
         call CTQMCHyb_ImpuritySolverInterface(kb*T,myhead,nheads,
@@ -1563,5 +1397,3 @@
       if(.not.negfon)deallocate(IPIV,WORK) 
       
       end subroutine keldyshImag
-
-

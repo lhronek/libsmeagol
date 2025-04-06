@@ -659,7 +659,7 @@ module mSigmaMethod1
       endif
     enddo
 
-    write(12347,*)"msvd2=",DREAL(ene),m,m2,n,svdtol
+!   write(12347,*)"msvd2=",DREAL(ene),m,m2,n,svdtol
 
 !    rmmax=0D0
 !    do i=1,n

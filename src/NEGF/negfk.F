@@ -84,7 +84,15 @@
       type(matrixTypeGeneral) :: ematbs_general(NspinComplexMatrix)
       type(matrixTypeGeneral) :: hgeneralp(NspinComplexMatrix),sgeneralp
       type(matrixTypeGeneral) :: ematgeneralp(NspinComplexMatrix)
+      type(matrixTypeGeneral) :: ematgeneralp_l_real(NspinComplexMatrix)
+      type(matrixTypeGeneral) :: ematgeneralp_r_real(NspinComplexMatrix)
+      type(matrixTypeGeneral) :: ematgeneralp_l_im(NspinComplexMatrix)
+      type(matrixTypeGeneral) :: ematgeneralp_r_im(NspinComplexMatrix)
       type(matrixTypeGeneral) :: rhogeneralp(NspinComplexMatrix)
+      type(matrixTypeGeneral) :: rhogeneralp_l_real(NspinComplexMatrix)
+      type(matrixTypeGeneral) :: rhogeneralp_r_real(NspinComplexMatrix)
+      type(matrixTypeGeneral) :: rhogeneralp_l_im(NspinComplexMatrix)
+      type(matrixTypeGeneral) :: rhogeneralp_r_im(NspinComplexMatrix)
       type(ioType) :: io
       integer*4:: sc_0,sc_1,sc_r,sc_m
       integer*4:: sc_0b,sc_1b,sc_rb,sc_mb
@@ -97,7 +105,13 @@
       DOUBLE PRECISION, DIMENSION (NspinBlocks) :: Icb,tk
       DOUBLE PRECISION, DIMENSION (NspinBlocks) :: Icfinal
       double precision, allocatable :: Rhopdostotk(:,:)
-      double precision emdostotk(4)
+      double precision :: emdostotk(4), weight
+      double complex, allocatable :: rho_real_l(:,:,:)
+      double complex, allocatable :: rho_real_r(:,:,:)
+      double complex, allocatable :: rho_im_l(:,:,:)
+      double complex, allocatable :: rho_im_r(:,:,:)
+      double complex, allocatable :: rho_f_im_l(:,:,:)
+      double complex, allocatable :: rho_f_im_r(:,:,:)
 
 
 #ifdef MPI
@@ -132,6 +146,85 @@
       CALL TIMER('NEGFK',1)
       CALL TIMER('NEGFK_su',1)
 
+! Create density matrices for real and imaginary components
+            do ispin=1,NspinComplexMatrix
+
+              call AllocateMatrixGeneral(n1,n1,
+     .             rhogeneralp(ispin)%matSparse%nnz,2,
+     .        rhogeneralp_l_real(ispin),"negfk",io)
+              rhogeneralp_l_real(ispin)%matSparse%q(:)=
+     .            rhogeneralp(ispin)%matSparse%q(:)
+              rhogeneralp_l_real(ispin)%matSparse%j(:)=
+     .            rhogeneralp(ispin)%matSparse%j(:)
+              rhogeneralp_l_real(ispin)%matSparse%b(:)=0D0
+
+              call AllocateMatrixGeneral(n1,n1,
+     .             rhogeneralp(ispin)%matSparse%nnz,2,
+     .        rhogeneralp_r_real(ispin),"negfk",io)
+              rhogeneralp_r_real(ispin)%matSparse%q(:)=
+     .            rhogeneralp(ispin)%matSparse%q(:)
+              rhogeneralp_r_real(ispin)%matSparse%j(:)=
+     .            rhogeneralp(ispin)%matSparse%j(:)
+              rhogeneralp_r_real(ispin)%matSparse%b(:)=0D0
+
+              call AllocateMatrixGeneral(n1,n1,
+     .             rhogeneralp(ispin)%matSparse%nnz,2,
+     .        rhogeneralp_l_im(ispin),"negfk",io)
+              rhogeneralp_l_im(ispin)%matSparse%q(:)=
+     .            rhogeneralp(ispin)%matSparse%q(:)
+              rhogeneralp_l_im(ispin)%matSparse%j(:)=
+     .            rhogeneralp(ispin)%matSparse%j(:)
+              rhogeneralp_l_im(ispin)%matSparse%b(:)=0D0
+
+              call AllocateMatrixGeneral(n1,n1,
+     .             rhogeneralp(ispin)%matSparse%nnz,2,
+     .        rhogeneralp_r_im(ispin),"negfk",io)
+              rhogeneralp_r_im(ispin)%matSparse%q(:)=
+     .            rhogeneralp(ispin)%matSparse%q(:)
+              rhogeneralp_r_im(ispin)%matSparse%j(:)=
+     .            rhogeneralp(ispin)%matSparse%j(:)
+              rhogeneralp_r_im(ispin)%matSparse%b(:)=0D0
+
+             if(emforces)then
+
+              call AllocateMatrixGeneral(n1,n1,
+     .             ematgeneralp(ispin)%matSparse%nnz,2,
+     .        ematgeneralp_l_real(ispin),"negfk",io)
+              ematgeneralp_l_real(ispin)%matSparse%q(:)=
+     .            ematgeneralp(ispin)%matSparse%q(:)
+              ematgeneralp_l_real(ispin)%matSparse%j(:)=
+     .            ematgeneralp(ispin)%matSparse%j(:)
+              ematgeneralp_l_real(ispin)%matSparse%b(:)=0D0
+
+              call AllocateMatrixGeneral(n1,n1,
+     .             ematgeneralp(ispin)%matSparse%nnz,2,
+     .        ematgeneralp_r_real(ispin),"negfk",io)
+              ematgeneralp_r_real(ispin)%matSparse%q(:)=
+     .            ematgeneralp(ispin)%matSparse%q(:)
+              ematgeneralp_r_real(ispin)%matSparse%j(:)=
+     .            ematgeneralp(ispin)%matSparse%j(:)
+              ematgeneralp_r_real(ispin)%matSparse%b(:)=0D0
+
+              call AllocateMatrixGeneral(n1,n1,
+     .             ematgeneralp(ispin)%matSparse%nnz,2,
+     .        ematgeneralp_l_im(ispin),"negfk",io)
+              ematgeneralp_l_im(ispin)%matSparse%q(:)=
+     .            ematgeneralp(ispin)%matSparse%q(:)
+              ematgeneralp_l_im(ispin)%matSparse%j(:)=
+     .            ematgeneralp(ispin)%matSparse%j(:)
+              ematgeneralp_l_im(ispin)%matSparse%b(:)=0D0
+
+              call AllocateMatrixGeneral(n1,n1,
+     .             ematgeneralp(ispin)%matSparse%nnz,2,
+     .        ematgeneralp_r_im(ispin),"negfk",io)
+              ematgeneralp_r_im(ispin)%matSparse%q(:)=
+     .            ematgeneralp(ispin)%matSparse%q(:)
+              ematgeneralp_r_im(ispin)%matSparse%j(:)=
+     .            ematgeneralp(ispin)%matSparse%j(:)
+              ematgeneralp_r_im(ispin)%matSparse%b(:)=0D0
+
+             endif  ! if(emforces)then
+            enddo ! do ispin=1,NspinComplexMatrix
 
 !---set negfmod values-------------------------------
       itermod=iter
@@ -391,13 +484,71 @@
 ! ########## Charge in equilibrium loop ###################
 
         if(.not.ldos.and..not.SkipEquilibriumRho)then
+
+           ALLOCATE(rho_f_im_l(NspinComplexMatrix,
+     &                        EImagGrid%nEnergies,
+     &                        rhogeneralp(1)%matSparse%nnz))
+
+           ALLOCATE(rho_f_im_r(NspinComplexMatrix,
+     &                        EImagGrid%nEnergies,
+     &                        rhogeneralp(1)%matSparse%nnz))
+
+            ALLOCATE(rho_im_l(NspinComplexMatrix,
+     &                        EImagGrid%nEnergies,
+     &                        rhogeneralp(1)%matSparse%nnz))
+
+           ALLOCATE(rho_im_r(NspinComplexMatrix,
+     &                        EImagGrid%nEnergies,
+     &                        rhogeneralp(1)%matSparse%nnz))
+
+          rho_im_l=0D0
+          rho_im_r=0D0
+          rho_f_im_l=0D0
+          rho_f_im_r=0D0
+
           CALL TIMER('NEGFK_imag',1)
           call keldyshImag(N12,NspinBlocks,NspinComplexMatrix,NL2,NR2,
      .        ik,iter, NEnerg1,NEnerg2,NPOLES,R0,
      .        V,T,Ef_Lead,
-     .        hgeneralp,sgeneralp,rhogeneralp,ematgeneralp,weightrho)
+     .        hgeneralp,sgeneralp,rhogeneralp,ematgeneralp,weightrho,
+     .        rho_im_l, rho_im_r, rho_f_im_l, rho_f_im_r)
           CALL TIMER('NEGFK_imag',2)
-        endif
+
+      ! equilibrium contribution to density evaluated on imaginary space contour
+      if(mynode_inverse.eq.0)then
+        DO ISPIN=1,EImagGrid%nSpin
+         DO I=1,EImagGrid%nEnergies
+
+              rhogeneralp_l_im(ispin)%matSparse%b(:)=
+     &            rhogeneralp_l_im(ispin)%matSparse%b(:)+
+     &            rho_im_l(ISPIN, I, :)
+
+              rhogeneralp_r_im(ispin)%matSparse%b(:)=
+     &            rhogeneralp_r_im(ispin)%matSparse%b(:)+
+     &             rho_im_r(ISPIN, I, :)
+
+               if(emforces)then
+
+                ematgeneralp_l_im(ispin)%matSparse%b(:)=
+     &            ematgeneralp_l_im(ispin)%matSparse%b(:)+
+     &            rho_f_im_l(ISPIN, I, :)
+
+                ematgeneralp_r_im(ispin)%matSparse%b(:)=
+     &            ematgeneralp_r_im(ispin)%matSparse%b(:)+
+     &            rho_f_im_r(ISPIN, I, :)
+
+                 endif ! if(emforces)then
+
+             enddo ! DO ISPIN=1,ERealGrid%nSpin
+        enddo ! DO I=1,ERealGrid%nEnergies
+
+          DEALLOCATE(rho_im_l)
+          DEALLOCATE(rho_im_r)
+          DEALLOCATE(rho_f_im_l)
+          DEALLOCATE(rho_f_im_r)
+
+        endif  !if(mynode_inverse.eq.0)then
+       endif  ! if(.not.ldos.and..not.SkipEquilibriumRho)then
 
         if(emtimings)then
           CALL SYSTEM_CLOCK(sc_1b,sc_rb,sc_mb)
@@ -425,40 +576,6 @@
           CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
         endif
 
-
-
-! ########## Energy Loop out of equilibrium ###############
-        if(mynode_inverse.eq.0)then
-          if(bs_add.and.(bs_method.eq.1))then
-
-            do ispin=1,NspinComplexMatrix
-              call AllocateMatrixGeneral(n1,n1,
-     .             sgeneralp%matSparse%nnz,2,
-     .             rhobs_general(ispin),"negfk",io)
-              rhobs_general(ispin)%matSparse%q(:)=
-     .            sgeneralp%matSparse%q(:)
-              rhobs_general(ispin)%matSparse%j(:)=
-     .            sgeneralp%matSparse%j(:)
-              rhobs_general(ispin)%matSparse%b(:)=0D0
-            enddo
-
-            if(emforces)then
-              do ispin=1,NspinComplexMatrix
-                call AllocateMatrixGeneral(n1,n1,
-     .               sgeneralp%matSparse%nnz,2,
-     .               ematbs_general(ispin),"negfk",io)
-                ematbs_general(ispin)%matSparse%q(:)=
-     .              sgeneralp%matSparse%q(:)
-                ematbs_general(ispin)%matSparse%j(:)=
-     .              sgeneralp%matSparse%j(:)
-                ematbs_general(ispin)%matSparse%b(:)=0D0
-              enddo
-            endif
-
-
-          endif
-        endif
-
         if(.not.SkipNonEquilibriumRho.and.v.ne.0.0D0)then
           CALL TIMER('NEGFK_real',1)
 
@@ -469,12 +586,52 @@
             CALL SYSTEM_CLOCK(sc_0b,sc_rb,sc_mb)
           endif
 
+          ALLOCATE(rho_real_l(NspinComplexMatrix,
+     &                        ERealGrid%nEnergies,
+     &                        rhogeneralp(1)%matSparse%nnz))
+          ALLOCATE(rho_real_r(NspinComplexMatrix,
+     &                        ERealGrid%nEnergies,
+     &                        rhogeneralp(1)%matSparse%nnz))
+
+          rho_real_l=0D0
+          rho_real_r=0D0
+
           call keldyshReal(N12,NspinBlocks,NspinComplexMatrix,
      &        NL2,NR2,nk,ik,
      &        V,T,Delta,Ef_Lead,rhobs_general,ematbs_general,
      &        hgeneralp,sgeneralp,rhogeneralp,ematgeneralp,
-     &        iter,ldos,weightrho)
-          CALL TIMER('NEGFK_real',2)
+     &        iter,ldos,weightrho, rho_real_l, rho_real_r)
+
+          ! non-equilibrium contribution to density evaluated on real space contour
+      DO ISPIN=1,ERealGrid%nSpin
+       DO I=1,ERealGrid%nEnergies
+
+              rhogeneralp_l_real(ispin)%matSparse%b(:)=
+     &            rhogeneralp_l_real(ispin)%matSparse%b(:)+
+     &            rho_real_l(ISPIN, I, :)
+
+              rhogeneralp_r_real(ispin)%matSparse%b(:)=
+     &            rhogeneralp_r_real(ispin)%matSparse%b(:)+
+     &             rho_real_r(ISPIN, I, :)
+
+               if(emforces)then
+                Ei=ERealGrid%e(i)
+
+                ematgeneralp_l_real(ispin)%matSparse%b(:)=
+     &            ematgeneralp_l_real(ispin)%matSparse%b(:)+
+     &            Ei*rho_real_l(ISPIN, I, :)
+
+                ematgeneralp_r_real(ispin)%matSparse%b(:)=
+     &            ematgeneralp_r_real(ispin)%matSparse%b(:)+
+     &            Ei*rho_real_r(ISPIN, I, :)
+
+                 endif ! if(emforces)then
+
+             enddo ! DO ISPIN=1,ERealGrid%nSpin
+      enddo ! DO I=1,ERealGrid%nEnergies
+
+          DEALLOCATE(rho_real_l)
+          DEALLOCATE(rho_real_r)
 
 
           if(emtimings)then
@@ -527,40 +684,6 @@
         CALL TIMER('NEGFK_col',1)
 
 
-
-        if(mynode_inverse.eq.0.and.bs_add.and.(bs_method.eq.1))then
-          CALL TIMER('bscoll',1)
-
-          call bs_collectrho_m1(N1,NspinComplexMatrix,
-     .        myhead,rhobs_general,sgeneralp)
-          if(emforces)then
-            call bs_collectrho_m1(N1,NspinComplexMatrix,
-     .          myhead,ematbs_general,sgeneralp)
-          endif
-
-          CALL TIMER('bscoll',2)
-        endif
-
-        if((mynode_inverse.eq.0).and.bs_add.and.(bs_method.eq.0))then
-          CALL TIMER('bscoll',1)
-          allocate(aux_par(N1,N1,NspinComplexMatrix))
-
-          allocate(sdense2(n1,n1))
-          sdense2=0D0
-          do ii=1,n1
-            do ind=sgeneralp%matSparse%q(ii),
-     .          sgeneralp%matSparse%q(ii+1)-1
-              sdense2(ii,sgeneralp%matSparse%j(ind))=
-     .             sgeneralp%matSparse%b(ind)
-            enddo
-          enddo
-          
-          call bs_collectrho(N1,NspinBlocks,sdense2,
-     .        myhead)
-          deallocate(aux_par,sdense2)
-          CALL TIMER('bscoll',2)
-        endif
-
         if(emtimings)then
           CALL SYSTEM_CLOCK(sc_1,sc_r,sc_m)
           write(12347,'(A,f12.6)')
@@ -587,23 +710,59 @@
           CALL SYSTEM_CLOCK(sc_0b,sc_rb,sc_mb)
         endif
 
+! Collect real and imaginary components across all MPI ranks
+      if(emforces)then
+        call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
+     &        ematgeneralp_l_real, ematgeneralp_l_real)
+        call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
+     &        ematgeneralp_r_real, ematgeneralp_r_real)
+        call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
+     &        ematgeneralp_l_im, ematgeneralp_l_im)
+        call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
+     &        ematgeneralp_r_im, ematgeneralp_r_im)
+      endif ! if(emforces)then
 
+        call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
+     &        rhogeneralp_l_real, rhogeneralp_l_real)
+        call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
+     &        rhogeneralp_r_real, rhogeneralp_r_real)
+        call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
+     &        rhogeneralp_l_im, rhogeneralp_l_im)
+        call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
+     &        rhogeneralp_r_im, rhogeneralp_r_im)
 
+! Sum density matrices real and imaginary components
+       weight=weightrho
+       do ispin=1,NspinComplexMatrix
+           do ii=1,rhogeneralp(ispin)%matSparse%nnz
 
-        if(mynode_inverse.eq.0)then
-          call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
-     &        rhobs_general, rhogeneralp)
-          if(emforces)then
-            call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
-     &          ematbs_general,ematgeneralp)
+        if(.not.SkipNonEquilibriumRho.and.v.ne.0.0D0)then
+
+! Calculate weight from non-equilibrium density
+         weight=(rhogeneralp_l_real(ispin)%matSparse%b(ii))**2.0D0/
+     &           (rhogeneralp_l_real(ispin)%matSparse%b(ii)**2.0D0+
+     &            rhogeneralp_r_real(ispin)%matSparse%b(ii)**2.0D0)
+
+        endif !if(.not.SkipNonEquilibriumRho.and.v.ne.0.0D0)then
+
+         if(emforces)then
+         ematgeneralp(ispin)%matSparse%b(ii) =
+     &     ematgeneralp(ispin)%matSparse%b(ii) +
+     &      (weight)*(ematgeneralp_l_im(ispin)%matSparse%b(ii) +
+     &                ematgeneralp_r_real(ispin)%matSparse%b(ii)) +
+     &      (1D0 - weight)*(ematgeneralp_r_im(ispin)%matSparse%b(ii) +
+     &                       ematgeneralp_l_real(ispin)%matSparse%b(ii))
           endif
- 
-!          call WriteMatrixSparse(rhogeneralp(1),"rhot1")
-!          call WriteMatrixSparse(rhogeneralp(2),"rhot2")
-!          call WriteMatrixSparse(rhogeneralp(3),"rhot3")
-!          call WriteMatrixSparse(rhogeneralp(4),"rhot4")
 
-        endif
+         rhogeneralp(ispin)%matSparse%b(ii) =
+     &     rhogeneralp(ispin)%matSparse%b(ii) +
+     &      (weight)*(rhogeneralp_l_im(ispin)%matSparse%b(ii) +
+     &                rhogeneralp_r_real(ispin)%matSparse%b(ii)) +
+     &      (1D0 - weight)*(rhogeneralp_r_im(ispin)%matSparse%b(ii) +
+     &                       rhogeneralp_l_real(ispin)%matSparse%b(ii))
+
+           enddo ! do ii=1,rhogeneralp(ispin)%matSparse%nnz
+        enddo ! do ispin=1,NspinComplexMatrix
 
 #ifdef MPI
          CALL MPI_BARRIER(negf_comm, MPIerror )
@@ -623,16 +782,22 @@
         endif
 
 
+        ! Destroy density matrices for real and imaginary components
+      do ispin=1,NspinComplexMatrix
+        call DestroyMatrixGeneral(rhogeneralp_l_real(ispin),"negfk",io)
+        call DestroyMatrixGeneral(rhogeneralp_r_real(ispin),"negfk",io)
+        call DestroyMatrixGeneral(rhogeneralp_l_im(ispin),"negfk",io)
+        call DestroyMatrixGeneral(rhogeneralp_r_im(ispin),"negfk",io)
 
-        if(mynode_inverse.eq.0.and.bs_add.and.(bs_method.eq.1))then
-          do ispin=1,NspinComplexMatrix
-            call DestroyMatrixGeneral(rhobs_general(ispin),"negfk",io)
-            if(emforces)then
-              call DestroyMatrixGeneral(ematbs_general(ispin),"negfk",
-     .            io)
-            endif
-          enddo
-        endif
+        if(emforces)then
+        call DestroyMatrixGeneral(ematgeneralp_l_real(ispin),"negfk",io)
+        call DestroyMatrixGeneral(ematgeneralp_r_real(ispin),"negfk",io)
+        call DestroyMatrixGeneral(ematgeneralp_l_im(ispin),"negfk",io)
+        call DestroyMatrixGeneral(ematgeneralp_r_im(ispin),"negfk",io)
+        endif  ! if(emforces)then
+
+      enddo !  ispin=1,NspinComplexMatrix
+
 
         CALL TIMER('NEGFK_col',2)
 
@@ -648,8 +813,6 @@
      $         't_negf8',(sc_1b-sc_0b)*1.0d0/sc_rb
           CALL SYSTEM_CLOCK(sc_0b,sc_rb,sc_mb)
         endif
-
-
 
 
       ELSE

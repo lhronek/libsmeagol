@@ -68,7 +68,7 @@ MODULE mNegf_Interface
   real(kdp),intent(in) :: S(maxnh)
   real(kdp),intent(inout) :: DM(maxnh,NspinRealInputMatrix)
   real(kdp),intent(inout) :: Omega(maxnh,NspinRealInputMatrix)
-  real(kdp),intent(in) :: xij(3,NspinRealInputMatrix)
+  real(kdp),intent(in) :: xij(3,maxnh)
   real(kdp),intent(in) :: kpoint(3,nkpts),weight_k(nkpts)
   real(kdp),intent(in) :: Vb
   integer, intent(in)  :: na_u,na_s
@@ -626,7 +626,8 @@ endif
       open(iu2,file='bulkrgt.DAT',status='old')
       read(iu2,*) slabelR, nuoR, nspinR, maxnhR
 
-      allocate(DMbulkL(maxnhL,NspinRealInputMatrix))
+      IF (.NOT. ALLOCATED(DMbulkL)) allocate(DMbulkL(maxnhL,NspinRealInputMatrix))
+      !allocate(DMbulkL(maxnhL,NspinRealInputMatrix))
       allocate(DMbulkR(maxnhR,NspinRealInputMatrix))
 
       allocate(numdL(nuoL),listdptrL(nuoL),listdL(maxnhL))

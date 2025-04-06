@@ -366,7 +366,7 @@ module mSigmaFourier
 !    enddo
  
 
-    write(12347,*)"maxdhinout=",maxval(abs(h0-h02)),maxval(abs(h1-h12)),maxval(abs(s0-s02)),maxval(abs(s1-s12))
+!   write(12347,*)"maxdhinout=",maxval(abs(h0-h02)),maxval(abs(h1-h12)),maxval(abs(s0-s02)),maxval(abs(s1-s12))
 
 !    do i1=1,n
 !      do i2=1,n

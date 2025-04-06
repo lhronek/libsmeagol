@@ -287,17 +287,17 @@ subroutine CurrentDistributionMatrix_Vectors(Jrho,maxnh,numh,listhptr,listh,n1lo
 
   dx=dx * BohrToAng
 
-  if(mynode == 0) then
-    write(12347,*)"Start of current distribution matrix for bias (eV)",v * 13.6057D0
-    do ispin=1,NspinComplexMatrix
-      write(12347,*)"  spin index",ispin
-      write(12347,*)"  atom_I,atom_J,Re(jmat),Im(jmat)"
-      call PrintMatrixCRS3VectorsDouble(jmat(ispin),dx,3,jmat(ispin)%nnz,"jmat_dx",iout)
-      write(12347,*)
-    enddo
-    write(12347,*)"End of current distribution matrix for bias (eV)",v * 13.6057D0
-    write(12347,*)
-  endif
+! if(mynode == 0) then
+!   write(12347,*)"Start of current distribution matrix for bias (eV)",v * 13.6057D0
+!   do ispin=1,NspinComplexMatrix
+!     write(12347,*)"  spin index",ispin
+!     write(12347,*)"  atom_I,atom_J,Re(jmat),Im(jmat)"
+!     call PrintMatrixCRS3VectorsDouble(jmat(ispin),dx,3,jmat(ispin)%nnz,"jmat_dx",iout)
+!     write(12347,*)
+!   enddo
+!   write(12347,*)"End of current distribution matrix for bias (eV)",v * 13.6057D0
+!   write(12347,*)
+! endif
 
 
   deallocate(nelerow,nelenz,listj,listjval)
@@ -326,15 +326,15 @@ subroutine CurrentDistributionMatrix_Vectors(Jrho,maxnh,numh,listhptr,listh,n1lo
       enddo
     enddo
 
-    write(12347,*)"Start of current distribution vectors for bias (eV)",v * 13.6057D0
-    do ispin=1,NspinComplexMatrix
-      write(12347,*)"  spin index",ispin
-      write(12347,*)"  atom_I,current_x,current_y,current_z"
-      do ii=1,jmat(ispin)%iRows
-        write(12347,*)"current_vector=",ii,Currdx(ispin,1,ii),Currdx(ispin,2,ii),Currdx(ispin,3,ii)
-      enddo
-    enddo
-    write(12347,*)"End of current distribution vectors for bias (eV)",v * 13.6057D0
+!   write(12347,*)"Start of current distribution vectors for bias (eV)",v * 13.6057D0
+!   do ispin=1,NspinComplexMatrix
+!     write(12347,*)"  spin index",ispin
+!     write(12347,*)"  atom_I,current_x,current_y,current_z"
+!     do ii=1,jmat(ispin)%iRows
+!       write(12347,*)"current_vector=",ii,Currdx(ispin,1,ii),Currdx(ispin,2,ii),Currdx(ispin,3,ii)
+!     enddo
+!   enddo
+!   write(12347,*)"End of current distribution vectors for bias (eV)",v * 13.6057D0
 
     deallocate(Currdx)
   endif

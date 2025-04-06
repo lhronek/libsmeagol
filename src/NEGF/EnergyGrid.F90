@@ -1249,7 +1249,7 @@ module mEnergyGrid
 
       nl=ERealGrid%leadsTotalDim(1)
       nr=ERealGrid%leadsTotalDim(2)
-      write(12347,*)"eneindex0=",Nenerg_div_start,Nenerg_div_end,nl,nr,n1
+!     write(12347,*)"eneindex0=",Nenerg_div_start,Nenerg_div_end,nl,nr,n1
 !---------find energy mesh iteratively--------------------------
       call recursive_energygrid(N1,NL,NR,NSPIN, IDepth,isize,Delta,V,dE,Nenerg_div_start,  Nenerg_div_end,Nenerg_new,Nenerg_total, ik,deltaimag, Nenerg_pernode,Energyranges,critam,hgeneral,sgeneral,storesigmai,LeadsVoltageShift,nleadslr)
 
@@ -1413,7 +1413,7 @@ module mEnergyGrid
 
           call AllocateMatrixGeneral(n1,n1,nnz,gfmattype,gfmat, "adaptivegrid", io)
           
-         write(12347,*)"eneindex=",i,ei,Nenerg_div_start,Nenerg_div_end,nl,nr,n1
+!        write(12347,*)"eneindex=",i,ei,Nenerg_div_start,Nenerg_div_end,nl,nr,n1
 
          call setgfelementsgeneral_nc(Ei+zi*Delta,nspin,ispin,gfmat,nnz,n1,nl,nr, ERealGrid%sigma(1,i,ispin,1)%sigma, ERealGrid%sigma(2,i,ispin,1)%sigma,hgeneral,sgeneral)
 

@@ -123,28 +123,26 @@ end subroutine UpdateRhoNEQ_nc
 
 
 
-  SUBROUTINE updaterho_nc(rhogeneral,ematgeneral,emforces,ispin,nspin,gf,nl,nr,gfmattype,weightc,cl,cr,weightrho,ene, set_rho_boundary)
+  SUBROUTINE updaterho_nc(rhogeneralp,b1,b2,emforces,ispin,nspin,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
 
     use mTypes
 
     implicit none
     logical, intent(in):: set_rho_boundary
     integer, intent(in) :: ispin,nspin
-    type(matrixTypeGeneral), intent(inout) :: rhogeneral(nspin),ematgeneral(nspin)
+    type(matrixTypeGeneral), intent(in) :: rhogeneralp(nspin)
+    double complex, intent(inout):: b1(rhogeneralp(1)%matSparse%nnz)
+    double complex, intent(inout):: b2(rhogeneralp(1)%matSparse%nnz)
     logical, intent(in) :: emforces
     type(matrixTypeGeneral),intent(in) :: gf
     integer nl,nr,gfmattype,ii,jj,n1,ind2,ind
-    double complex weightc,cl,cr,ene
-    double precision weightrho
+    double complex weightc,clr,ene
+    double precision const
 
     if(gfmattype.eq.0)then
       if(nspin<=2)then
-        call updaterhodense(rhogeneral(ispin),ematgeneral(ispin),emforces,gf,nl,nr,gfmattype,weightc,cl,cr,weightrho,ene,set_rho_boundary)
-      else
-        call updaterhodense_nc(rhogeneral,ematgeneral,emforces,nspin,gf,rhogeneral(1)%irows,nl/2,nr/2,gfmattype,weightc,cl,cr,weightrho,ene,set_rho_boundary)
+        call updaterhodense(rhogeneralp(ispin),b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
       endif
-    elseif(gfmattype.eq.2)then
-      call updaterhosparse(rhogeneral(ispin),ematgeneral(ispin),emforces,gf,nl,nr,gfmattype,weightc,cl,cr,weightrho,ene,set_rho_boundary)
     endif
 
 
@@ -271,7 +269,6 @@ end subroutine UpdateRhoNEQ_nc
     DOUBLE PRECISION, PARAMETER :: PI=3.141592654D0
     double complex, allocatable :: mat(:,:)
 
-
     c1=(-zi/(2.0D0*PI))*weightc*((1D0-weightrho)*(cl) + weightrho *(cr))
     c2=-DCONJG(c1)
 
@@ -322,47 +319,44 @@ end subroutine UpdateRhoNEQ_nc
   end SUBROUTINE updaterhodense_nc
 
 
-  SUBROUTINE updaterhodense(rhogenerals,ematgeneral,emforces,gf,nl,nr,gfmattype,weightc,cl,cr,weightrho,ene, set_rho_boundary)
+  SUBROUTINE updaterhodense(rhogeneralp,b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
 
     use mTypes
 
     implicit none
     logical, intent(in):: set_rho_boundary
     logical, intent(in) :: emforces
-    type(matrixTypeGeneral) :: rhogenerals,ematgeneral,gf
+    type(matrixTypeGeneral), intent(in) :: rhogeneralp, gf
+    double complex, intent(inout):: b1(rhogeneralp%matSparse%nnz)
+    double complex, intent(inout):: b2(rhogeneralp%matSparse%nnz)
     integer nl,nr,gfmattype,ii,jj,n1,ind2,ind, nnz
-    double complex weightc,cl,cr,ene
+    double complex weightc,clr,ene
     double complex gfij,drhoij,denematij,gfji,c1,c2
-    double precision weightrho
+    double precision const
     DOUBLE COMPLEX, PARAMETER :: zi=(0.D0,1.D0)
     DOUBLE PRECISION, PARAMETER :: PI=3.141592654D0
 
-    n1=rhogenerals%irows
-    nnz=rhogenerals%matSparse%nnz
-!    write(*,*)"weights=",weightc,cl,cr
-!    write(*,*)"weightcl=",cl
-!    write(*,*)"weightcr=",cr
-    c1=(-zi/(2.0D0*PI))*weightc*((1D0-weightrho)*(cl) + weightrho *(cr))
+    n1=rhogeneralp%irows
+    nnz=rhogeneralp%matSparse%nnz
+    c1=(-zi/(2.0D0*PI))*weightc*const*clr
     c2=-DCONJG(c1)
 
     do ii=1,n1
-      do ind=rhogenerals%matSparse%q(ii),rhogenerals%matSparse%q(ii+1)-1
-        JJ=rhogenerals%matSparse%j(ind)
+      do ind=rhogeneralp%matSparse%q(ii),rhogeneralp%matSparse%q(ii+1)-1
+        JJ=rhogeneralp%matSparse%j(ind)
         if ((((II .GT. NL) .AND. (II .LE. N1-NR)) .OR.((JJ .GT. NL) .AND. (JJ .LE. N1-NR))).or.set_rho_boundary) THEN
 
           gfij=gf%matdense%a(II,JJ)
           gfji=gf%matdense%a(JJ,II)
-          rhogenerals%matSparse%b(ind)=rhogenerals%matSparse%b(ind)+c1*gfij-c2*DCONJG(gfji)
+          b1(ind)=b1(ind)+c1*gfij-c2*DCONJG(gfji)
 
           if(emforces)then
-            ematgeneral%matSparse%b(ind)=ematgeneral%matSparse%b(ind)+c1*ene * gfij -c2*DCONJG(ene) * DCONJG(gfji)
+            b2(ind)=b2(ind)+c1*ene*gfij-c2*DCONJG(ene)*DCONJG(gfji)
           endif
+
         ENDIF
       enddo
     enddo
  
 
   end SUBROUTINE updaterhodense
-
-
-
