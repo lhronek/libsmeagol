@@ -977,7 +977,7 @@ module mEnergyGrid
         if(myhead.eq.ihead)then
 
           do il=1,energygrid1%nLeads
-            call MPI_SEND(sigma_buffer(il)%sigma,sigma_buffer%n**2,DAT_dcomplex,0,1,inverseheads_comm,MPIerror)
+            call MPI_SEND(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex,0,1,inverseheads_comm,MPIerror)
           enddo
 
         endif
