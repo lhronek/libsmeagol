@@ -5,7 +5,7 @@ FC                = mpif90
 AR                = ar -r
 
 # Fortran compiler's flags
-FCFLAGS           = -DMPI -qopenmp -xHost -O2 -g -fno-omit-frame-pointer
+FCFLAGS           = -DMPI -qopenmp -xHost -O2 -g -fno-omit-frame-pointer -assume byterecl
 
 # Flags to specify the layout used by source files
 FCFLAGS_FIXEDFORM = -fixed

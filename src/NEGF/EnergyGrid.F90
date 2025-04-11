@@ -665,7 +665,7 @@ module mEnergyGrid
         bytes_sigma=bytes_sigma + 16 *  sigma_buffer(il)%n**2
       enddo
 
-      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma/4)
+      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
 
       rec1=energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
       do ie=1,energygrid1%nEnergies
@@ -775,9 +775,9 @@ module mEnergyGrid
 
       sigma_io=22349
       if(ik==1)then
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma/4)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
       else
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma/4)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
       endif
 
       rec1=energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
@@ -940,9 +940,9 @@ module mEnergyGrid
       enddo
 
       if(ik==1)then
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma/4)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
       else
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma/4)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
       endif
 
 
@@ -1020,7 +1020,7 @@ module mEnergyGrid
         bytes_sigma=bytes_sigma + 16 *  sigma_buffer(il)%n**2
       enddo
 
-      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma/4)
+      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
 
 !***********************
       rec1=energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
@@ -2105,9 +2105,9 @@ module mEnergyGrid
 
       sigma_io=22349
       if(ik==1)then
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma/4)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
       else
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma/4)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
       endif
 
       rec1= (ie-1) * nheads  + ETransmGrid%nEnergiesGlobal  * (ispin-1) + ETransmGrid%nEnergiesGlobal  * ETransmGrid%nspin * (ik-1)  
@@ -2184,7 +2184,7 @@ module mEnergyGrid
         bytes_sigma=bytes_sigma + 16 *  sigma_buffer(il)%n**2
       enddo
 
-      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma/4)
+      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
 
 !***********************
       rec1= (ie-1) * nheads  + ETransmGrid%nEnergiesGlobal  * (ispin-1) + ETransmGrid%nEnergiesGlobal  * ETransmGrid%nspin * (ik-1)  
