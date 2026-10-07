@@ -74,7 +74,9 @@ contains
       if(opindex==5)opindexInternal=3
 
       call InvertDenseON(n1,gfmat%matdense,nl,nr,opindexInternal)
-      if(opindexInternal==2.or.opindexInternal==3)then
+      if(opindex==4.or.opindex==5)then
+        gfout%matdense%a(1:nr,1:nl)=gfmat%matdense%a(n1-nr+1:n1,1:nl)
+      elseif(opindexInternal==2.or.opindexInternal==3)then
         gfout%matdense%a(:,1:nl)=gfmat%matdense%a(:,1:nl)
         gfout%matdense%a(:,nl+1:nl+nr)=gfmat%matdense%a(:,n1-nr+1:n1)
       endif
@@ -114,11 +116,14 @@ contains
     integer, intent(in) :: N1,nl,nr,opindex,solver
 
     integer opindexInternal
+    type(matrixTypeGeneral) :: gfcols
+    type(ioType) :: io
 
     if(DistributedInversionActive(solver))then
       call InvertSparseONDistributed(N1,gfmat,nl,nr,gfout,opindex)
       return
     endif
+    io%isDebug=.false.
 
     opindexInternal=opindex
     if(gfmat%mattype == 0)then
@@ -128,7 +133,9 @@ contains
 
 ! this will be called by main.F90
       call InvertDenseON(n1,gfmat%matdense,nl,nr,opindexInternal)
-      if(opindexInternal==2.or.opindexInternal==3)then
+      if(opindex==4.or.opindex==5)then
+        gfout%matdense%a(1:nr,1:nl)=gfmat%matdense%a(n1-nr+1:n1,1:nl)
+      elseif(opindexInternal==2.or.opindexInternal==3)then
         gfout%matdense%a(:,1:nl)=gfmat%matdense%a(:,1:nl)
         gfout%matdense%a(:,nl+1:nl+nr)=gfmat%matdense%a(:,n1-nr+1:n1)
       endif
@@ -140,7 +147,14 @@ contains
 
         if(opindex==4)opindexInternal=2
         if(opindex==5)opindexInternal=3
-        call InvertSparseON(N1,gfmat,nl,nr,gfout,opindexInternal)
+        if(opindex==4.or.opindex==5)then
+          call AllocateMatrixGeneral(n1,nl+nr,n1*(nl+nr),0,gfcols,"InvertONGeneral",io)
+          call InvertSparseON(N1,gfmat,nl,nr,gfcols,opindexInternal)
+          gfout%matdense%a(1:nr,1:nl)=gfcols%matdense%a(n1-nr+1:n1,1:nl)
+          call DestroyMatrixGeneral(gfcols,"InvertONGeneral",io)
+        else
+          call InvertSparseON(N1,gfmat,nl,nr,gfout,opindexInternal)
+        endif
       endif
     endif
   end subroutine InvertONGeneral
