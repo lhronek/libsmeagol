@@ -123,7 +123,10 @@ end subroutine UpdateRhoNEQ_nc
 
 
 
-  SUBROUTINE updaterho_nc(rhogeneralp,b1,b2,emforces,ispin,nspin,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
+  SUBROUTINE updaterho_nc(rhogeneralp,bb1,bb2,emforces,ispin,nspin,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
+! per-energy contribution to the equilibrium density: collinear spins fill block ispin of
+! bb1/bb2, the non-collinear dense case (nspin 4, one 2n x 2n GF) fills all four blocks;
+! nl, nr are the lead dimensions of the GF as passed (doubled for non-collinear)
 
     use mTypes
 
@@ -131,26 +134,63 @@ end subroutine UpdateRhoNEQ_nc
     logical, intent(in):: set_rho_boundary
     integer, intent(in) :: ispin,nspin
     type(matrixTypeGeneral), intent(in) :: rhogeneralp(nspin)
-    double complex, intent(inout):: b1(rhogeneralp(1)%matSparse%nnz)
-    double complex, intent(inout):: b2(rhogeneralp(1)%matSparse%nnz)
+    double complex, intent(inout):: bb1(nspin,rhogeneralp(1)%matSparse%nnz)
+    double complex, intent(inout):: bb2(nspin,rhogeneralp(1)%matSparse%nnz)
     logical, intent(in) :: emforces
     type(matrixTypeGeneral),intent(in) :: gf
-    integer nl,nr,gfmattype,ii,jj,n1,ind2,ind
+    integer nl,nr,gfmattype
     double complex weightc,clr,ene
     double precision const
 
     if(gfmattype.eq.0)then
       if(nspin<=2)then
-        call updaterhodense(rhogeneralp(ispin),b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
+        call updaterhodense(rhogeneralp(ispin),bb1(ispin,:),bb2(ispin,:),emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
+      else
+        call updaterhodense_nc(rhogeneralp,nspin,bb1,bb2,emforces,gf,rhogeneralp(1)%iRows,nl/2,nr/2,weightc,clr,const,ene, set_rho_boundary)
       endif
     elseif(gfmattype.eq.2)then
-      if(nspin<=2)then
-        call updaterhosparse(rhogeneralp(ispin),b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
-      endif
+      call updaterhosparse(rhogeneralp(ispin),bb1(ispin,:),bb2(ispin,:),emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
     endif
 
-
   end SUBROUTINE updaterho_nc
+
+  SUBROUTINE updaterhodense_nc(rhogeneralp,nspin,bb1,bb2,emforces,gf,n1,nl,nr,weightc,clr,const,ene, set_rho_boundary)
+! non-collinear dense GF of size 2*n1: block 1 = up-up, 2 = down-down, 3 = up-down, 4 = down-up
+    use mTypes
+    implicit none
+    logical, intent(in):: set_rho_boundary
+    integer, intent(in) :: nspin,n1,nl,nr
+    type(matrixTypeGeneral), intent(in) :: rhogeneralp(nspin), gf
+    double complex, intent(inout):: bb1(nspin,rhogeneralp(1)%matSparse%nnz)
+    double complex, intent(inout):: bb2(nspin,rhogeneralp(1)%matSparse%nnz)
+    logical, intent(in) :: emforces
+    double complex weightc,clr,ene
+    double precision const
+    integer ii,jj,ind,ib
+    integer ro(4),co(4)
+    double complex gfij,gfji,c1,c2
+    DOUBLE COMPLEX, PARAMETER :: zi=(0.D0,1.D0)
+    DOUBLE PRECISION, PARAMETER :: PI=3.141592654D0
+    c1=(-zi/(2.0D0*PI))*weightc*const*clr
+    c2=-DCONJG(c1)
+    ro=(/0,n1,0,n1/)
+    co=(/0,n1,n1,0/)
+    do ii=1,n1
+      do ind=rhogeneralp(1)%matSparse%q(ii),rhogeneralp(1)%matSparse%q(ii+1)-1
+        jj=rhogeneralp(1)%matSparse%j(ind)
+        if ((((II .GT. NL) .AND. (II .LE. N1-NR)) .OR.((JJ .GT. NL) .AND. (JJ .LE. N1-NR))).or.set_rho_boundary) THEN
+          do ib=1,4
+            gfij=gf%matdense%a(ro(ib)+II,co(ib)+JJ)
+            gfji=gf%matdense%a(co(ib)+JJ,ro(ib)+II)
+            bb1(ib,ind)=bb1(ib,ind)+c1*gfij-c2*DCONJG(gfji)
+            if(emforces)then
+              bb2(ib,ind)=bb2(ib,ind)+c1*ene*gfij-c2*DCONJG(ene)*DCONJG(gfji)
+            endif
+          enddo
+        ENDIF
+      enddo
+    enddo
+  end SUBROUTINE updaterhodense_nc
 
 
   SUBROUTINE updaterhosparse(rhogeneralp,b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
@@ -209,72 +249,6 @@ end subroutine UpdateRhoNEQ_nc
     call DestroyMatrixGeneral(gfdagger,"updaterhosparse",io)
   end SUBROUTINE updaterhosparse
 
-  SUBROUTINE updaterhodense_nc(rhogeneral,ematgeneral,emforces,nspin,gf,n1,nl,nr,gfmattype,weightc,cl,cr,weightrho,ene, set_rho_boundary)
-
-    use mTypes
-    use mMatrixUtil, only:WriteMatrixSparse
-
-    implicit none
-    logical, intent(in):: set_rho_boundary
-    integer, intent(in) :: nspin,n1,nl,nr
-    type(matrixTypeGeneral) :: rhogeneral(nspin),ematgeneral(nspin),gf
-    logical, intent(in) :: emforces
-    integer gfmattype,ii,jj,ind2,ind
-    double complex weightc,cl,cr,ene
-    double complex gfij,drhoij,gfji,c1,c2
-    double precision weightrho
-    DOUBLE COMPLEX, PARAMETER :: zi=(0.D0,1.D0)
-    DOUBLE PRECISION, PARAMETER :: PI=3.141592654D0
-    double complex, allocatable :: mat(:,:)
-
-    c1=(-zi/(2.0D0*PI))*weightc*((1D0-weightrho)*(cl) + weightrho *(cr))
-    c2=-DCONJG(c1)
-
-    do ii=1,n1
-      do ind=rhogeneral(1)%matSparse%q(ii),rhogeneral(1)%matSparse%q(ii+1)-1
-        jj =rhogeneral(1)%matSparse%j(ind)
-        if ((((II .GT. NL) .AND. (II .LE. N1-NR)) .OR.((JJ .GT. NL) .AND. (JJ .LE. N1-NR))).or.set_rho_boundary) THEN
-
-         gfij=gf%matdense%a(II,JJ)
-         gfji=gf%matdense%a(JJ,II)
-         rhogeneral(1)%matSparse%b(ind)=rhogeneral(1)%matSparse%b(ind)+c1*gfij-c2*DCONJG(gfji)
-         if(emforces)then
-           ematgeneral(1)%matSparse%b(ind)=ematgeneral(1)%matSparse%b(ind)+c1*ene*gfij-c2*DCONJG(ene)*DCONJG(gfji)
-         endif
-
-         gfij=gf%matdense%a(n1+II,n1+JJ)
-         gfji=gf%matdense%a(n1+JJ,n1+II)
-         rhogeneral(2)%matSparse%b(ind)=rhogeneral(2)%matSparse%b(ind)+c1*gfij-c2*DCONJG(gfji)
-         if(emforces)then
-           ematgeneral(2)%matSparse%b(ind)=ematgeneral(2)%matSparse%b(ind)+c1*ene*gfij-c2*DCONJG(ene)*DCONJG(gfji)
-         endif
-
-
-         gfij=gf%matdense%a(II,n1+JJ)
-         gfji=gf%matdense%a(n1+JJ,II)
-         rhogeneral(3)%matSparse%b(ind)=rhogeneral(3)%matSparse%b(ind)+c1*gfij-c2*DCONJG(gfji)
-         if(emforces)then
-           ematgeneral(3)%matSparse%b(ind)=ematgeneral(3)%matSparse%b(ind)+c1*ene*gfij-c2*DCONJG(ene)*DCONJG(gfji)
-         endif
-
-
-         gfij=gf%matdense%a(n1+II,JJ)
-         gfji=gf%matdense%a(JJ,n1+II)
-         rhogeneral(4)%matSparse%b(ind)=rhogeneral(4)%matSparse%b(ind)+c1*gfij-c2*DCONJG(gfji)
-         if(emforces)then
-           ematgeneral(4)%matSparse%b(ind)=ematgeneral(4)%matSparse%b(ind)+c1*ene*gfij-c2*DCONJG(ene)*DCONJG(gfji)
-         endif
-
-        ENDIF
-      ENDDO
-    ENDDO
-
-!  call WriteMatrixSparse(rhogeneral(1),"rho1")
-!  call WriteMatrixSparse(rhogeneral(2),"rho2")
-!  call WriteMatrixSparse(rhogeneral(3),"rho3")
-!  call WriteMatrixSparse(rhogeneral(4),"rho4")
-
-  end SUBROUTINE updaterhodense_nc
 
 
   SUBROUTINE updaterhodense(rhogeneralp,b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)

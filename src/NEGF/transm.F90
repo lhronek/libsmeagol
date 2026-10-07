@@ -128,6 +128,8 @@
       integer, allocatable, save :: nchannelSLK(:,:,:),nchannelsRK(:,:,:)
       double precision, allocatable :: tchannelsEne(:)
       double precision emdostotk(NspinBlocks), empdostotk(em_nuo,NspinBlocks)
+      double complex, allocatable :: bld1(:,:),bld2(:,:)
+      integer isb
       double complex, allocatable :: Tr4GK(:)
       integer    nTr4G
       DOUBLE COMPLEX, PARAMETER :: zi=(0.D0,1.D0)
@@ -789,9 +791,18 @@
                     flc=0.0D0
 
 !                    write(12347,*)"gr0:fl,fr=",dreal(ETransmGrid%e(I)),flc,frc
-                    call updaterho_nc(rhogeneral,ematgeneral,emforces,&
+                    allocate(bld1(NspinComplexMatrix,rhogeneral(1)%matSparse%nnz))
+                    allocate(bld2(NspinComplexMatrix,rhogeneral(1)%matSparse%nnz))
+                    bld1=0.0D0
+                    bld2=0.0D0
+                    call updaterho_nc(rhogeneral,bld1,bld2,emforces,&
                     ispin,NspinComplexMatrix,gfgeneral,nl,nr,gfmattype,&
-                    -ETransmGrid%w(i),flc,frc,1.0D0,ei0,.true.)
+                    -ETransmGrid%w(i),frc,1.0D0,ei0,.true.)
+                    do isb=1,NspinComplexMatrix
+                      rhogeneral(isb)%matSparse%b=rhogeneral(isb)%matSparse%b+bld1(isb,:)
+                      if(emforces) ematgeneral(isb)%matSparse%b=ematgeneral(isb)%matSparse%b+bld2(isb,:)
+                    enddo
+                    deallocate(bld1,bld2)
                   else
                     if(abs(GetRhoSingleLead)==1.or.abs(GetRhoSingleLead)==3)then
 

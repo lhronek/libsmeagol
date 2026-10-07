@@ -1337,16 +1337,16 @@
 
       ! Calculate imaginary contour along left
           const = 1.0D0
-          call updaterho_nc(rhogeneralp,rho_im_l(ispin, I, :),
-     &           rho_f_im_l(ispin, I, :), emforces,
+          call updaterho_nc(rhogeneralp,rho_im_l(:, I, :),
+     &           rho_f_im_l(:, I, :), emforces,
      &          ispin, NspinComplexMatrix,gf, nl,nr,gfmattype,
      &          EImagGrid%w(i),constl,const,EImagGrid%e(i),
      &          .false.)
 
       ! Calculate imaginary contour along right
           const = 1.0D0
-          call updaterho_nc(rhogeneralp,rho_im_r(ispin, I, :),
-     &           rho_f_im_r(ispin, I, :), emforces,
+          call updaterho_nc(rhogeneralp,rho_im_r(:, I, :),
+     &           rho_f_im_r(:, I, :), emforces,
      &           ispin, NspinComplexMatrix,gf, nl,nr,gfmattype,
      &           EImagGrid%w(i),constr,const,EImagGrid%e(i),
      &           .false.)

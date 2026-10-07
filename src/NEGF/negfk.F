@@ -516,7 +516,7 @@
 
       ! equilibrium contribution to density evaluated on imaginary space contour
       if(mynode_inverse.eq.0)then
-        DO ISPIN=1,EImagGrid%nSpin
+        DO ISPIN=1,NspinComplexMatrix
          DO I=1,EImagGrid%nEnergies
 
               rhogeneralp_l_im(ispin)%matSparse%b(:)=
@@ -603,7 +603,7 @@
      &        iter,ldos,weightrho, rho_real_l, rho_real_r)
 
           ! non-equilibrium contribution to density evaluated on real space contour
-      DO ISPIN=1,ERealGrid%nSpin
+      DO ISPIN=1,NspinComplexMatrix
        DO I=1,ERealGrid%nEnergies
 
               rhogeneralp_l_real(ispin)%matSparse%b(:)=
