@@ -35,7 +35,7 @@ module mNegfOutput
   logical, save :: log_fresh = .true.
 
   public :: negf_output_init, negf_output_finalize, negf_master, negf_out_unit
-  public :: negf_warn, negf_abort
+  public :: negf_warn, negf_abort, negf_log_flush
 
 contains
 
@@ -73,6 +73,11 @@ contains
     log_open = (ios == 0)
     log_fresh = .false.
   end subroutine negf_output_init
+
+  subroutine negf_log_flush()
+! checkpoint for the diagnostics log so that a host abort loses at most the current energy point
+    if (log_open) flush (negf_log_unit)
+  end subroutine negf_log_flush
 
   subroutine negf_output_finalize()
     if (log_open) then

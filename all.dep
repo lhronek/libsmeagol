@@ -21,12 +21,12 @@ mpi__include.o : mpi__include.f90
 
 setgfelements.o : setgfelements.F90 mtypes.mod negfmod.mod scissoroperator.mod
 
-negfk.o : negfk.F $(SRCDIR)/NEGF/negfk_include.h mtypes.mod sigma.mod mboundstates.mod mmatrixutil.mod scissoroperator.mod precision.mod mmpi_negf.mod mcurrentdistribution.mod negfmod.mod menergygrid.mod
+negfk.o : negfk.F $(SRCDIR)/NEGF/negfk_include.h mtypes.mod sigma.mod mboundstates.mod mmatrixutil.mod scissoroperator.mod precision.mod mmpi_negf.mod mcurrentdistribution.mod negfmod.mod menergygrid.mod mnegfoutput.mod
 
 negfcoop.mod : mnegfcoop.F90 mnegfcoop.o mtypes.mod fdf.mod atomlist.mod mpi_siesta.mod mnegfoutput.mod
 mnegfcoop.o : mnegfcoop.F90 mtypes.mod fdf.mod atomlist.mod mpi_siesta.mod mnegfoutput.mod
 
-keldysh.o : keldysh.F $(SRCDIR)/NEGF/const2.h mtypes.mod mmatrixutilomp.mod sigma.mod mboundstates.mod mmatrixutil.mod mimpuritysolver.mod scissoroperator.mod precision.mod mmpi_negf.mod negfmod.mod monboundstates.mod moninterface.mod msigmamethod1.mod menergygrid.mod
+keldysh.o : keldysh.F $(SRCDIR)/NEGF/const2.h mtypes.mod mmatrixutilomp.mod sigma.mod mboundstates.mod mmatrixutil.mod mimpuritysolver.mod scissoroperator.mod precision.mod mmpi_negf.mod negfmod.mod monboundstates.mod moninterface.mod msigmamethod1.mod menergygrid.mod mnegfoutput.mod
 
 rho_boundary.o : rho_boundary.F90 
 
@@ -134,7 +134,7 @@ sigma.o : sigma.F
 
 sorthalf.o : sorthalf.f mnegfoutput.mod
 
-transm.o : transm.F90 mtypes.mod mtransmissiondecomposition.mod sigma.mod mmatrixutil.mod mconstants.mod mimpuritysolver.mod precision.mod mmpi_negf.mod mcurrentdistribution.mod negfmod.mod negfcoop.mod moninterface.mod msigmamethod1.mod menergygrid.mod
+transm.o : transm.F90 mtypes.mod mtransmissiondecomposition.mod sigma.mod mmatrixutil.mod mconstants.mod mimpuritysolver.mod precision.mod mmpi_negf.mod mcurrentdistribution.mod negfmod.mod negfcoop.mod moninterface.mod msigmamethod1.mod menergygrid.mod mnegfoutput.mod
 
 writematrix.o : writematrix.F negfmod.mod atmfuncs.mod mnegfoutput.mod
 

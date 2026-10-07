@@ -63,6 +63,7 @@
       use precision
       use negfmod
       use mTypes
+      use mNegfOutput, only: negf_log_flush
       use mMatrixUtil
       use mBoundstates
       use mMPI_NEGF
@@ -982,6 +983,7 @@
 !        call deallocate_energygrid_selfenergies(ERealGrid)
 !      ENDIF
 
+      call negf_log_flush()
       CALL TIMER('NEGFK',2)      
 
 

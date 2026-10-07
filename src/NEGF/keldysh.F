@@ -48,6 +48,7 @@
      .    nbss, bssc, inversion_solver, nprocs_hs, geterrsigma,
      .    bseskip, bs_method
       use mTypes
+      use mNegfOutput, only: negf_log_flush
       use mMatrixUtil
       use mONInterface
       use mBoundstates
@@ -909,6 +910,7 @@
           deallocate(sigmaleads)
 
         enddo ! DO ISPIN=1,ERealGrid%nSpin
+        call negf_log_flush()
       enddo ! DO I=1,ERealGrid%nEnergies
 
       end subroutine keldyshReal
@@ -937,6 +939,7 @@
      & ComputeImpurityGfMatsubara,PrintImpurityGfMatsubara,
      & CallImpuritySolver
       use mTypes
+      use mNegfOutput, only: negf_log_flush
       use mMatrixUtil
       use mONInterface
       use mMPI_NEGF
@@ -1384,6 +1387,7 @@
      &     call AddRhoTilde(rhogeneralp(ispin),gfmattype, nl,nr,.false.)
         endif
 
+        call negf_log_flush()
       ENDDO !  DO I=1,EImagGrid%nEnergies
 
 

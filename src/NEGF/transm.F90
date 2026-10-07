@@ -86,6 +86,7 @@
       use sigma, only: sigma_method
       use negfmod
       use mTypes
+      use mNegfOutput, only: negf_log_flush
       use mMatrixUtil
       use mONInterface
       use mSigmaMethod1
@@ -1177,6 +1178,8 @@
 
 
         ENDDO spinloop
+
+      call negf_log_flush()
 
       ENDDO eneloop
 
