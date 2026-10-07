@@ -90,6 +90,7 @@ C *********************************************************************
       use negfmod
       use mTypes
       use mMatrixUtil
+      use mONInterface, only: DistributedInversionActive
       use mMPI_NEGF
       use set_rhobd
       use ScissorOperator, only : sco,scoSCF,SCOSetHamiltonianBlock,
@@ -385,7 +386,8 @@ C Create new distribution of H and S
 
 
 
-      if(mynode_inverse.eq.0)then
+      if(mynode_inverse.eq.0.or.
+     .    DistributedInversionActive(inversion_solver))then
         do ispin=1,NspinComplexMatrix
           hgeneralp(ispin)%mattype=2
           call DestroyMatrixGeneral(hgeneralp(ispin),"negfk",iout)

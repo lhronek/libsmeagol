@@ -112,6 +112,9 @@
       type(ioType) :: io
       integer gfmattype,sizesigma
       integer  nnzrow(n1),nnz
+      logical distl,distlocal
+      logical, allocatable :: emask(:)
+      integer nnzr
       double complex gfadd
       integer*4:: sc_0,sc_1,sc_r,sc_m,scb_0,scb_1
       integer*4:: sca_0,sca_1
@@ -131,6 +134,9 @@
      &                 rhogeneralp(1)%matSparse%nnz)
 
       io%isDebug=.false.
+      distl=DistributedInversionActive(inversion_solver)
+      distlocal=distl.and..not.bs_add.and.NspinComplexMatrix.le.2
+      nnzr=rhogeneralp(1)%matSparse%nnz
       if(emtimings)then
         CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
         CALL SYSTEM_CLOCK(sca_0,sc_r,sc_m)
@@ -142,7 +148,7 @@
         gfmattype=2 !for sparse GF matrix
       endif
 
-      if(mynode_inverse.eq.0)then
+      if(mynode_inverse.eq.0.or.distlocal)then
         ALLOCATE(zv(N1))
         nw3=10*n1
         ALLOCATE(WORK3(nw3))
@@ -404,7 +410,7 @@
 
 !start allocating sparse matrix
          
-            if(mynode_inverse==0)then
+            if(mynode_inverse==0.or.distl)then
 
               sgeneralp%mattype=2
               hgeneralp(ispin)%mattype=2
@@ -539,7 +545,7 @@
      .              "keldyshreal", io)
 
                 call InvertONGeneral(N1,gfgeneral,nl,nr,gfout,2,
-     .              inversion_solver)
+     .              inversion_solver,distl,.not.distlocal)
 
                 gf_iter1l=gfout%matdense%a(:,1:nl)
                 gf_iter1r=gfout%matdense%a(:,nl+1:nl+nr)
@@ -558,16 +564,24 @@
             endif
 
           elseif(negfon.and..not.(bs_add.and.bs_method.eq.1).and.
-     &        DistributedInversionActive(inversion_solver))then
+     &        distl)then
+            if(distlocal) call AllocateMatrixGeneral(n1,nl+nr,
+     &          n1*(nl+nr),0,gfout,"keldyshreal", io)
             call InvertONGeneral(N1,gfgeneral,nl,nr,gfout,2,
-     &          inversion_solver)
+     &          inversion_solver,distl,.not.distlocal)
+            if(distlocal)then
+              gf_iter1l=gfout%matdense%a(:,1:nl)
+              gf_iter1r=gfout%matdense%a(:,nl+1:nl+nr)
+              call DestroyMatrixGeneral(gfout,"keldyshreal",io)
+            endif
+            call DestroyMatrixGeneral(gfgeneral,"keldyshreal",io)
           endif
           if(nprocs_hs.ne.1)
      &      call DestroyMatrixGeneral(gfP,"keldyshreal",io)
 !          CALL TIMER('gfinv',2)
           
 !          CALL TIMER('bs_m1',1)
-          if(mynode_inverse.eq.0)then
+          if(mynode_inverse.eq.0.or.distlocal)then
             if((bs_add).and.(bs_method.eq.1))then
 
 
@@ -703,12 +717,25 @@
                 CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
               endif
 
+              if(distlocal)then
+                allocate(emask(nnzr))
+                call DistributedEntryOwnerMask(n1,
+     &              rhogeneralp(1)%matSparse%q,
+     &              rhogeneralp(1)%matSparse%j,nnzr,emask)
+                call UpdateRhoNEQ_owned(nnzr,n1,nl,nr,nl,
+     &              rhogeneralp(1)%matSparse%q,
+     &              rhogeneralp(1)%matSparse%j,
+     &              rho_real_l(ISPIN, I, :),gf1,gf2,
+     &              (1.D0,0D0)/(2.D0*PI)*ERealGrid%w(I),
+     &              .false.,emask)
+              else
               call UpdateRhoNEQ(rhogeneralp(1)%matSparse%nnz,n1,nl,nr,
      &            nl,
      &            rhogeneralp(1)%matSparse%q,rhogeneralp(1)%matSparse%j,
      &            rho_real_l(ISPIN, I, :),gf1,gf2,
      &            (1.D0,0D0)/(2.D0*PI)*ERealGrid%w(I),
      &            .false.)
+              endif
 
               if(emtimings)then
                 CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
@@ -856,12 +883,26 @@
                 CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
               endif
 
+              if(distlocal)then
+                call UpdateRhoNEQ_owned(nnzr,n1,nl,nr,nr,
+     &              rhogeneralp(1)%matSparse%q,
+     &              rhogeneralp(1)%matSparse%j,
+     &              rho_real_r(ISPIN, I, :),gf1,gf2,
+     &              (1.D0,0D0)/(2.D0*PI)*ERealGrid%w(I),
+     &              .false.,emask)
+                deallocate(emask)
+                call ReduceEnergySliceToMaster(rho_real_l,
+     &              NspinComplexMatrix,ERealGrid%nEnergies,nnzr,ispin,I)
+                call ReduceEnergySliceToMaster(rho_real_r,
+     &              NspinComplexMatrix,ERealGrid%nEnergies,nnzr,ispin,I)
+              else
               call UpdateRhoNEQ(rhogeneralp(1)%matSparse%nnz,n1,
      &            nl,nr,nr,
      &            rhogeneralp(1)%matSparse%q,rhogeneralp(1)%matSparse%j,
      &            rho_real_r(ISPIN, I, :),gf1,gf2,
      &            (1.D0,0D0)/(2.D0*PI)*ERealGrid%w(I)
      &            ,.false.)
+              endif
               if(emtimings)then
                 CALL SYSTEM_CLOCK(scb_1,sc_r,sc_m)
                 write(12347,'(A,f12.6)')
@@ -1003,6 +1044,9 @@
       integer*4:: sc_0,sc_1,sc_r,sc_m
       INTEGER :: MPIerror
       logical writeGFHSheader
+      logical distl,gath
+      logical, allocatable :: emask(:)
+      integer nnzr
 
       if(.not.negfon)then
         gfmattype=0 !for dense GF matrix
@@ -1011,6 +1055,9 @@
       endif
 
       io%isDebug=.false.
+      distl=DistributedInversionActive(inversion_solver)
+      gath=ComputeImpurityGfMatsubara
+      nnzr=rhogeneralp(1)%matSparse%nnz
 
 
       if(ComputeImpurityGfMatsubara.and.iter.eq.1)then
@@ -1138,7 +1185,7 @@
           endif
 
 
-          if(mynode_inverse.eq.0)then
+          if(mynode_inverse.eq.0.or.distl)then
 
             sgeneralp%mattype=2
             hgeneralp(ispin)%mattype=2
@@ -1231,12 +1278,12 @@
             endif
           else
 
-            if(mynode_inverse.eq.0.or.
-     &          DistributedInversionActive(inversion_solver))then
+            if(mynode_inverse.eq.0.or.distl)then
 !Uncomment the commented out lines below to print out the GF before and
 !after inversion
 !              if(myhead==0) call PrintMatrixCRS(gf%matSparse,"gfinv",io)
-              call InvertONGeneral(N1,gf,nl,nr,gfout,1,inversion_solver)
+              call InvertONGeneral(N1,gf,nl,nr,gfout,1,inversion_solver,
+     &            distl,gath)
 !              if(myhead==0) call PrintMatrixCRS(gf%matSparse,"gf",io)
 !              call stopnegf
             endif
@@ -1339,10 +1386,37 @@
           deallocate(sigmaleads)
 
       ! Calculate imaginary contour component of density (rhogeneralp)
-          if(mynode_inverse.eq.0)then
+          if(mynode_inverse.eq.0.or.(distl.and..not.gath))then
 
-      ! Calculate imaginary contour along left
           const = 1.0D0
+          if(distl.and..not.gath)then
+            allocate(emask(nnzr))
+            call DistributedEntryOwnerMask(n1,
+     &          rhogeneralp(1)%matSparse%q,rhogeneralp(1)%matSparse%j,
+     &          nnzr,emask)
+            call updaterho_nc_owned(rhogeneralp,rho_im_l(:, I, :),
+     &          rho_f_im_l(:, I, :), emforces,
+     &          ispin, NspinComplexMatrix,gf, nl,nr,gfmattype,
+     &          EImagGrid%w(i),constl,const,EImagGrid%e(i),
+     &          .false.,emask)
+            call updaterho_nc_owned(rhogeneralp,rho_im_r(:, I, :),
+     &          rho_f_im_r(:, I, :), emforces,
+     &          ispin, NspinComplexMatrix,gf, nl,nr,gfmattype,
+     &          EImagGrid%w(i),constr,const,EImagGrid%e(i),
+     &          .false.,emask)
+            deallocate(emask)
+            call ReduceEnergySliceToMaster(rho_im_l,NspinComplexMatrix,
+     &          EImagGrid%nEnergies,nnzr,ispin,I)
+            call ReduceEnergySliceToMaster(rho_im_r,NspinComplexMatrix,
+     &          EImagGrid%nEnergies,nnzr,ispin,I)
+            if(emforces)then
+              call ReduceEnergySliceToMaster(rho_f_im_l,
+     &            NspinComplexMatrix,EImagGrid%nEnergies,nnzr,ispin,I)
+              call ReduceEnergySliceToMaster(rho_f_im_r,
+     &            NspinComplexMatrix,EImagGrid%nEnergies,nnzr,ispin,I)
+            endif
+          else
+      ! Calculate imaginary contour along left
           call updaterho_nc(rhogeneralp,rho_im_l(:, I, :),
      &           rho_f_im_l(:, I, :), emforces,
      &          ispin, NspinComplexMatrix,gf, nl,nr,gfmattype,
@@ -1356,6 +1430,7 @@
      &           ispin, NspinComplexMatrix,gf, nl,nr,gfmattype,
      &           EImagGrid%w(i),constr,const,EImagGrid%e(i),
      &           .false.)
+          endif
 
 
        if(.false.)then
@@ -1372,10 +1447,12 @@
               CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
             endif
 
-            call DestroyMatrixGeneral(gf,"keldyshimag2",io)
-            call DestroyMatrixGeneral(gfserial,"keldyshimag2",io)
 ! end allocating sparse matrix
           endif ! if(mynode_inverse.eq.0)then
+          if(mynode_inverse.eq.0.or.distl)
+     &        call DestroyMatrixGeneral(gf,"keldyshimag2",io)
+          if(nprocs_hs.ne.1)
+     &        call DestroyMatrixGeneral(gfserial,"keldyshimag2",io)
 
           if(nprocs_hs.ne.1)
      &        call DestroyMatrixGeneral(gfP,"keldyshimag",io)

@@ -62,6 +62,7 @@
 
       use precision
       use negfmod
+      use mONInterface, only: DistributedInversionActive
       use mTypes
       use mNegfOutput, only: negf_log_flush
       use mMatrixUtil
@@ -331,6 +332,15 @@
       endif
 
 
+      endif
+
+      if(DistributedInversionActive(inversion_solver))then
+        call ReplicateMatrixCRS(sgeneralp,n12,n12,inverse_comm,0,
+     .      mynode_inverse,"negfk",io)
+        do ispin=1,NspinComplexMatrix
+          call ReplicateMatrixCRS(hgeneralp(ispin),n12,n12,inverse_comm,
+     .        0,mynode_inverse,"negfk",io)
+        enddo
       endif
 
       if(nprocs_hs.ne.1)then

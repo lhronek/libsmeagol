@@ -40,6 +40,7 @@ MODULE mNegf_Interface
   use mTypes
   use negfmod
   use mMatrixUtil
+  use mONInterface, only: DistributedInversionActive
   use mMPI_NEGF
   use mNegfOutput, only : negf_abort
   use set_rhobd
@@ -336,7 +337,7 @@ MODULE mNegf_Interface
       CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
     endif
 
-    if(mynode_inverse.eq.0)then
+    if(mynode_inverse.eq.0.or.DistributedInversionActive(inversion_solver))then
       do ispin=1,NspinComplexMatrix
         hgeneralp(ispin)%mattype=2
         call DestroyMatrixGeneral(hgeneralp(ispin),"negfk",iout)

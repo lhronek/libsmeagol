@@ -141,7 +141,9 @@ end subroutine UpdateRhoNEQ_nc
     integer nl,nr,gfmattype
     double complex weightc,clr,ene
     double precision const
+    logical :: nomask(1)
 
+    nomask(1)=.true.
     if(gfmattype.eq.0)then
       if(nspin<=2)then
         call updaterhodense(rhogeneralp(ispin),bb1(ispin,:),bb2(ispin,:),emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
@@ -149,7 +151,7 @@ end subroutine UpdateRhoNEQ_nc
         call updaterhodense_nc(rhogeneralp,nspin,bb1,bb2,emforces,gf,rhogeneralp(1)%iRows,nl/2,nr/2,weightc,clr,const,ene, set_rho_boundary)
       endif
     elseif(gfmattype.eq.2)then
-      call updaterhosparse(rhogeneralp(ispin),bb1(ispin,:),bb2(ispin,:),emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
+      call updaterhosparse(rhogeneralp(ispin),bb1(ispin,:),bb2(ispin,:),emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary,.false.,nomask)
     endif
 
   end SUBROUTINE updaterho_nc
@@ -193,13 +195,16 @@ end subroutine UpdateRhoNEQ_nc
   end SUBROUTINE updaterhodense_nc
 
 
-  SUBROUTINE updaterhosparse(rhogeneralp,b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
+  SUBROUTINE updaterhosparse(rhogeneralp,b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary,use_mask,mask)
 ! sparse (order-N) Green's function: same accumulation as updaterhodense on the rho pattern,
-! G(ii,jj) scattered row by row from gf, conj(G(jj,ii)) from its Hermitian conjugate
+! G(ii,jj) scattered row by row from gf, conj(G(jj,ii)) from its Hermitian conjugate;
+! with use_mask only the entries with mask(ind) true are accumulated
     use mMatrixUtil
     use mTypes
     implicit none
     logical, intent(in):: set_rho_boundary
+    logical, intent(in):: use_mask
+    logical, intent(in):: mask(*)
     logical, intent(in) :: emforces
     type(matrixTypeGeneral), intent(in) :: rhogeneralp, gf
     double complex, intent(inout):: b1(rhogeneralp%matSparse%nnz)
@@ -230,6 +235,9 @@ end subroutine UpdateRhoNEQ_nc
         gji(gfdagger%matSparse%j(ind))=gfdagger%matSparse%b(ind)
       enddo
       do ind=rhogeneralp%matSparse%q(ii),rhogeneralp%matSparse%q(ii+1)-1
+        if(use_mask)then
+          if(.not.mask(ind)) cycle
+        endif
         jj=rhogeneralp%matSparse%j(ind)
         if ((((II .GT. NL) .AND. (II .LE. N1-NR)) .OR.((JJ .GT. NL) .AND. (JJ .LE. N1-NR))).or.set_rho_boundary) THEN
           b1(ind)=b1(ind)+c1*gij(jj)-c2*gji(jj)
@@ -292,3 +300,53 @@ end subroutine UpdateRhoNEQ_nc
  
 
   end SUBROUTINE updaterhodense
+
+  SUBROUTINE updaterho_nc_owned(rhogeneralp,bb1,bb2,emforces,ispin,nspin,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary,mask)
+! updaterho_nc restricted to the stored entries with mask(ind) true; sparse Green's function only
+    use mTypes
+    use mNegfOutput, only: negf_abort
+    implicit none
+    logical, intent(in):: set_rho_boundary
+    integer, intent(in) :: ispin,nspin
+    type(matrixTypeGeneral), intent(in) :: rhogeneralp(nspin)
+    double complex, intent(inout):: bb1(nspin,rhogeneralp(1)%matSparse%nnz)
+    double complex, intent(inout):: bb2(nspin,rhogeneralp(1)%matSparse%nnz)
+    logical, intent(in) :: emforces
+    type(matrixTypeGeneral),intent(in) :: gf
+    integer nl,nr,gfmattype
+    double complex weightc,clr,ene
+    double precision const
+    logical, intent(in) :: mask(rhogeneralp(1)%matSparse%nnz)
+
+    if(gfmattype.ne.2) call negf_abort("updaterho_nc_owned: entry ownership is defined for the sparse Green function only")
+    call updaterhosparse(rhogeneralp(ispin),bb1(ispin,:),bb2(ispin,:),emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary,.true.,mask)
+  end SUBROUTINE updaterho_nc_owned
+
+subroutine UpdateRhoNEQ_owned(nnz,n1,nl,nr,nlead,q,j,b,gf1,gf2,const, set_rho_boundary,mask)
+! UpdateRhoNEQ restricted to the stored entries with mask(ind) true
+   implicit none
+   integer,intent(in):: nnz,n1,nl,nr,q(n1+1),j(nnz),nlead
+   double complex, intent(in):: const
+   double complex, intent(in):: gf1(nlead,n1),gf2(nlead,n1)
+   logical, intent(in):: set_rho_boundary
+   logical, intent(in):: mask(nnz)
+   double complex, intent(inout):: b(nnz)
+   integer ii,ind,jj,i1
+   double complex gfadd
+
+!$omp parallel do default(shared) private(ii,ind,jj,gfadd,i1) schedule(dynamic)
+   do ii=1,n1
+     do ind= q(ii),q(ii+1)-1
+       if(.not.mask(ind)) cycle
+       jj=j(ind)
+       if ((((II .GT. NL) .AND. (II .LE. N1-NR)) .OR.((JJ .GT. NL) .AND. (JJ .LE. N1-NR))).or.set_rho_boundary) THEN
+         gfadd=0D0
+         do i1=1,nlead
+           gfadd=gfadd+gf2(i1,ii)*gf1(i1,jj)
+         enddo
+         b(ind)=b(ind)+ const * gfadd
+       endif
+     enddo
+   enddo
+!$omp end parallel do
+end subroutine UpdateRhoNEQ_owned

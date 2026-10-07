@@ -48,6 +48,8 @@ module mONInterface
   public :: InvertONGeneral
   public :: InvertONGeneral2
   public :: DistributedInversionActive
+  public :: DistributedEntryOwnerMask
+  public :: ReduceEnergySliceToMaster
   public :: OrderNDenseFillThreshold
 
   !> block-tridiagonal fill (stored entries / block area) from which the default serial inverter uses dense
@@ -116,20 +118,28 @@ contains
   end subroutine InvertONGeneral2
 
 
-  subroutine InvertONGeneral(N1,gfmat,nl,nr,gfout,opindex,solver)
+  !> replicated (default .false.): every rank of the inverse group holds the same gfmat; gather (default .true.):
+  !> the distributed inverter delivers all result blocks to the group master (see mInverseDistributed)
+  subroutine InvertONGeneral(N1,gfmat,nl,nr,gfout,opindex,solver,replicated,gather)
     character(len=*), parameter :: sMyName="InvertONGeneral"
     type(matrixTypeGeneral), intent(inout) :: gfmat
     type(matrixTypeGeneral), intent(inout) :: gfout
     integer, intent(in) :: N1,nl,nr,opindex,solver
+    logical, intent(in), optional :: replicated,gather
 
     integer opindexInternal,iBlocks
     real(kdp) :: fill
     logical :: dense
     type(matrixTypeGeneral) :: gfcols
     type(ioType) :: io
+    logical :: rep,gat
 
     if(DistributedInversionActive(solver))then
-      call InvertSparseONDistributed(N1,gfmat,nl,nr,gfout,opindex)
+      rep=.false.
+      gat=.true.
+      if(present(replicated)) rep=replicated
+      if(present(gather)) gat=gather
+      call InvertSparseONDistributed(N1,gfmat,nl,nr,gfout,opindex,rep,gat)
       return
     endif
     io%isDebug=.false.

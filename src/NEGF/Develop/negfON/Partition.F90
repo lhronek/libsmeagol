@@ -66,6 +66,7 @@ module mPartition
   public :: FillBlocksFromMatrixSparse
   public :: FillBlocksFromMatrixSparse2Sparse
   public :: BlockTridiagonalFill
+  public :: PartitionBlockLayout
 
   interface PartitionMatrix
     module procedure PartitionAndReadSparseRowStoredASCII, PartitionAndReadSparseRowStoredBinary, &
@@ -1066,20 +1067,19 @@ module mPartition
   end subroutine PartitionAndReadSparseRowStoredBinary
 
 
-!> \brief number of diagonal blocks of the block-tridiagonal partition of a CRS matrix and the
-!> fraction of the block area that its stored entries occupy; allocates no block data
-  subroutine BlockTridiagonalFill(matA,nl,nr,iBlocks,fill,io)
-    character (len=*), parameter :: sMyName = "BlockTridiagonalFill"
+!> \brief sizes and row offsets of the diagonal blocks of the block-tridiagonal partition of a CRS matrix;
+!> allocates no block data; the diagonal blocks must be square, contiguous and matched by the off-diagonal blocks
+  subroutine PartitionBlockLayout(matA,nl,nr,iBlocks,nb,off,io)
+    character (len=*), parameter :: sMyName = "PartitionBlockLayout"
     type(matrixTypeGeneral), intent(in) :: matA
     integer, intent(in) :: nl,nr
     integer, intent(out) :: iBlocks
-    real(kdp), intent(out) :: fill
+    integer, allocatable, intent(out) :: nb(:),off(:)
     type(ioType), intent(inout) :: io
 
     type(matrixSparseType), allocatable :: h0(:),h1(:),hm1(:)
     integer, allocatable ::  horzss(:,:), vertss(:,:)
     integer :: iCols,iRows,i
-    real(kdp) :: area
 
     iCols=matA%iCols
     iRows=matA%iRows
@@ -1092,17 +1092,48 @@ module mPartition
     call AllocateArray(iBlocks,h1,sMyName,io)
     call AllocateArray(iBlocks,hm1,sMyName,io)
     call PartitionSparse(h0,h1,hm1,horzss,vertss,iRows,iCols,nl,nr,iBlocks,io)
-    area=0.0_kdp
+    allocate(nb(iBlocks),off(iBlocks))
     do i=1,iBlocks
-      area=area+real(h0(i)%iRows,kdp)*real(h0(i)%iCols,kdp)
-      if(i<iBlocks) area=area+real(h1(i)%iRows,kdp)*real(h1(i)%iCols,kdp)+real(hm1(i)%iRows,kdp)*real(hm1(i)%iCols,kdp)
+      nb(i)=h0(i)%iRows
+      off(i)=h0(i)%iVert
+      if(h0(i)%iCols/=nb(i).or.h0(i)%iHorz/=off(i)) &
+        call negf_abort(sMyName//": non-square diagonal block in the block-tridiagonal partition")
     enddo
-    fill=real(matA%matSparse%nnz,kdp)/area
+    do i=1,iBlocks-1
+      if(off(i+1)/=off(i)+nb(i).or.h1(i)%iRows/=nb(i).or.h1(i)%iCols/=nb(i+1).or.h1(i)%iHorz/=off(i+1).or. &
+         h1(i)%iVert/=off(i).or.hm1(i)%iRows/=nb(i+1).or.hm1(i)%iCols/=nb(i).or.hm1(i)%iHorz/=off(i).or. &
+         hm1(i)%iVert/=off(i+1)) &
+        call negf_abort(sMyName//": off-diagonal block layout does not match the diagonal blocks")
+    enddo
     call DestroyArray(h0,sMyName,io)
     call DestroyArray(h1,sMyName,io)
     call DestroyArray(hm1,sMyName,io)
     call DestroyArray(horzss,sMyName,io)
     call DestroyArray(vertss,sMyName,io)
+  end subroutine PartitionBlockLayout
+
+!> \brief number of diagonal blocks of the block-tridiagonal partition of a CRS matrix and the
+!> fraction of the block area that its stored entries occupy; allocates no block data
+  subroutine BlockTridiagonalFill(matA,nl,nr,iBlocks,fill,io)
+    character (len=*), parameter :: sMyName = "BlockTridiagonalFill"
+    type(matrixTypeGeneral), intent(in) :: matA
+    integer, intent(in) :: nl,nr
+    integer, intent(out) :: iBlocks
+    real(kdp), intent(out) :: fill
+    type(ioType), intent(inout) :: io
+
+    integer, allocatable :: nb(:),off(:)
+    integer :: i
+    real(kdp) :: area
+
+    call PartitionBlockLayout(matA,nl,nr,iBlocks,nb,off,io)
+    area=0.0_kdp
+    do i=1,iBlocks
+      area=area+real(nb(i),kdp)**2
+      if(i<iBlocks) area=area+2.0_kdp*real(nb(i),kdp)*real(nb(i+1),kdp)
+    enddo
+    fill=real(matA%matSparse%nnz,kdp)/area
+    deallocate(nb,off)
   end subroutine BlockTridiagonalFill
 
   subroutine PartitionGeneralMatrix(h0,h1,hm1,iBlocks,matA,nl,nr,io)

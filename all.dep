@@ -21,7 +21,7 @@ mpi__include.o : mpi__include.f90
 
 setgfelements.o : setgfelements.F90 mtypes.mod negfmod.mod scissoroperator.mod
 
-negfk.o : negfk.F $(SRCDIR)/NEGF/negfk_include.h mtypes.mod sigma.mod mboundstates.mod mmatrixutil.mod scissoroperator.mod precision.mod mmpi_negf.mod mcurrentdistribution.mod negfmod.mod menergygrid.mod mnegfoutput.mod
+negfk.o : negfk.F $(SRCDIR)/NEGF/negfk_include.h mtypes.mod sigma.mod mboundstates.mod mmatrixutil.mod scissoroperator.mod precision.mod mmpi_negf.mod mcurrentdistribution.mod negfmod.mod menergygrid.mod mnegfoutput.mod moninterface.mod
 
 negfcoop.mod : mnegfcoop.F90 mnegfcoop.o mtypes.mod fdf.mod atomlist.mod mpi_siesta.mod mnegfoutput.mod
 mnegfcoop.o : mnegfcoop.F90 mtypes.mod fdf.mod atomlist.mod mpi_siesta.mod mnegfoutput.mod
@@ -32,7 +32,7 @@ rho_boundary.o : rho_boundary.F90
 
 negfk_subs.o : negfk_subs.F90 $(SRCDIR)/NEGF/const2.h negfmod.mod sigma.mod mmpi_negf.mod mnegfoutput.mod
 
-UpdateRho.o : UpdateRho.F90 mtypes.mod mmatrixutil.mod
+UpdateRho.o : UpdateRho.F90 mtypes.mod mmatrixutil.mod mnegfoutput.mod
 
 mselfenergies.mod : SelfEnergies.F90 SelfEnergies.o mtypes.mod msigmafourier.mod mcomputeulr.mod mconstants.mod negfmod.mod msigmamethod1.mod
 SelfEnergies.o : SelfEnergies.F90 mtypes.mod msigmafourier.mod mcomputeulr.mod mconstants.mod negfmod.mod msigmamethod1.mod
@@ -187,10 +187,10 @@ IO_SXDHE.o : IO_SXDHE.F90 mtypes.mod parallel.mod ionew.mod mmatrixutil.mod mpi_
 
 Stop_Negf.o : Stop_Negf.F90 mpi_siesta.mod mnegfoutput.mod
 
-emtg.o : emtg.F mtypes.mod set_rhobd.mod mmatrixutil.mod sys.mod precision.mod mmpi_negf.mod scissoroperator.mod mcurrdisttotal.mod negfmod.mod mnegf_interface.mod
+emtg.o : emtg.F mtypes.mod set_rhobd.mod mmatrixutil.mod sys.mod precision.mod mmpi_negf.mod scissoroperator.mod mcurrdisttotal.mod negfmod.mod mnegf_interface.mod moninterface.mod
 
-mnegf_interface.mod : Negf_Interface.F90 Negf_Interface.o mtypes.mod set_rhobd.mod mio_sxdhe.mod parallel.mod mmatrixutil.mod mconstants.mod scissoroperator.mod mcurrdisttotal.mod mmpi_negf.mod negfmod.mod mnegfoutput.mod
-Negf_Interface.o : Negf_Interface.F90 mtypes.mod set_rhobd.mod mio_sxdhe.mod parallel.mod mmatrixutil.mod mconstants.mod scissoroperator.mod mcurrdisttotal.mod mmpi_negf.mod negfmod.mod mnegfoutput.mod
+mnegf_interface.mod : Negf_Interface.F90 Negf_Interface.o mtypes.mod set_rhobd.mod mio_sxdhe.mod parallel.mod mmatrixutil.mod mconstants.mod scissoroperator.mod mcurrdisttotal.mod mmpi_negf.mod negfmod.mod mnegfoutput.mod moninterface.mod
+Negf_Interface.o : Negf_Interface.F90 mtypes.mod set_rhobd.mod mio_sxdhe.mod parallel.mod mmatrixutil.mod mconstants.mod scissoroperator.mod mcurrdisttotal.mod mmpi_negf.mod negfmod.mod mnegfoutput.mod moninterface.mod
 
 convertmatrix_NEGFSerialK.o : convertmatrix_NEGFSerialK.F90 mtypes.mod negfmod.mod mmatrixutil.mod mmpi_negf.mod
 

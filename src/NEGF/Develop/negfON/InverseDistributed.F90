@@ -1,12 +1,18 @@
 !
 ! Distributed block-tridiagonal inversion over the inverse_comm process group.
 !
-! Contract (shared with InvertSparseONv3): gfsparse holds E*S-H-Sigma in CRS form on the
-! group master; on return its diagonal blocks (and the first off-diagonal blocks for
-! opindex 1,3,5) contain the corresponding blocks of G on the stored pattern;
-! gfout(:,1:nl) = G(:,1:nl) and gfout(:,nl+1:nl+nr) = G(:,N1-nr+1:N1) for opindex 2,3;
-! gfout(1:nr,1:nl) = G(N1-nr+1:N1,1:nl) for opindex 4,5. gfsparse and gfout are
-! referenced on mynode_inverse == 0 only; every rank of inverse_comm must call.
+! Contract (shared with InvertSparseONv3): gfsparse holds E*S-H-Sigma in CRS form; on return its
+! diagonal blocks (and the first off-diagonal blocks for opindex 1,3,5) contain the corresponding
+! blocks of G on the stored pattern; gfout(:,1:nl) = G(:,1:nl) and gfout(:,nl+1:nl+nr) =
+! G(:,N1-nr+1:N1) for opindex 2,3; gfout(1:nr,1:nl) = G(N1-nr+1:N1,1:nl) for opindex 4,5.
+! Every rank of inverse_comm must call.
+!   replicated = .false.: gfsparse exists on mynode_inverse == 0 only; it scatters the blocks and
+!                         gathers every result back (gfout on the master only).
+!   replicated = .true. : every rank holds the same gfsparse (pattern and values) and fills only
+!                         the blocks of its own chunk; it receives the G blocks of its chunk in its
+!                         own gfsparse and, for opindex 2,3, the lead-column rows of its chunk and of
+!                         the next chunk's first block in its own gfout (gfout must exist on every
+!                         rank); gather = .true. additionally delivers everything to the master.
 !
 module mInverseDistributed
   use mConstants
@@ -21,10 +27,17 @@ module mInverseDistributed
 
   public :: InvertSparseONDistributed
   public :: DistributedInversionActive
+  public :: DistributedEntryOwnerMask
+  public :: ReduceEnergySliceToMaster
 
   integer, parameter :: tag_blocks = 3101
   integer, parameter :: tag_results = 3102
+  integer, parameter :: tag_columns = 3103
   logical, save :: first_call = .true.
+
+  ! block layout of the pattern inverted last (pattern arrays kept only when derived from a local copy)
+  integer, save :: c_n1 = -1, c_nnz = -1, c_nblk = 0, c_nchunks = 0
+  integer, allocatable, save :: c_q(:), c_j(:), c_nb(:), c_off(:), c_ca(:), c_cb(:), c_blkofrow(:), c_ownerofblk(:)
 
 contains
 
@@ -33,21 +46,20 @@ contains
     DistributedInversionActive = (solver == 2 .and. nnodes_inverse > 1)
   end function DistributedInversionActive
 
-  subroutine InvertSparseONDistributed(N1,gfsparse,nl,nr,gfout,opindex)
+  subroutine InvertSparseONDistributed(N1,gfsparse,nl,nr,gfout,opindex,replicated,gather)
     integer, intent(in) :: N1,nl,nr,opindex
     type(matrixTypeGeneral), intent(inout) :: gfsparse,gfout
+    logical, intent(in) :: replicated,gather
 
     character(len=*), parameter :: sMyName="InvertSparseONDistributed"
     type(ioType) :: io
-    type(matrixType), allocatable :: h0(:),h1(:),hm1(:)
-    type(matrixType), allocatable :: lh0(:),lh1(:),lhm1(:)
+    type(matrixType), allocatable :: lh0(:),lh1(:),lhm1(:),th0(:),th1(:),thm1(:)
     type(matrixType), allocatable :: rD(:),rU(:),rL(:),rSigL(:),rSigR(:),rG(:),rC1(:),rCK(:),rMM(:),rML(:)
     type(matrixType), allocatable :: sL(:),M1(:),M2(:),g0(:),g1(:),gm1(:),c1loc(:),cKloc(:)
-    type(matrixType) :: Saa,Sab,Sba,Sbb,sR,M,tmp,blk
-    integer, allocatable :: nb(:),off(:),ca(:),cb(:),kept(:),ka(:),kb(:)
+    type(matrixType) :: Saa,Sab,Sba,Sbb,sR,M,blk
     complex(kdp), allocatable :: buf(:)
-    integer :: me,np,nblk,nchunks,a,b,bb,i,p,k,nred,cnt,pos,mpierror
-    logical :: need_offdiag,need_col,need_corner,have_chunk
+    integer :: me,np,nblk,nchunks,a,b,bb,i,p,k,nred,cnt,pos,mpierror,an
+    logical :: need_offdiag,need_col,need_corner,have_chunk,gath,write_local
     real(kdp) :: total
 #ifdef MPI
     integer :: istatus(MPI_STATUS_SIZE)
@@ -59,123 +71,80 @@ contains
     need_offdiag=(opindex==1.or.opindex==3.or.opindex==5)
     need_col=(opindex==2.or.opindex==3)
     need_corner=(opindex==4.or.opindex==5)
-    nblk=0
+    gath=gather.or..not.replicated
 
-    if(me==0)then
-      if(gfsparse%mattype/=2) call negf_abort(sMyName//": the distributed inverter needs the sparse (EM.OrderN) Green function matrix")
-      call PartitionMatrix(h0,h1,hm1,nblk,gfsparse,nl,nr,io)
-      call FillBlocksFromMatrixSparse(h0,h1,hm1,nblk,gfsparse)
-    endif
-#ifdef MPI
-    call MPI_Bcast(nblk,1,MPI_integer,0,inverse_comm,mpierror)
-#endif
-    allocate(nb(nblk),off(nblk))
-    if(me==0)then
-      do i=1,nblk
-        nb(i)=h0(i)%iRows
-        off(i)=h0(i)%iVert
-        if(h0(i)%iCols/=nb(i).or.h0(i)%iHorz/=off(i)) &
-          call negf_abort(sMyName//": non-square diagonal block in the block-tridiagonal partition")
-      enddo
-      do i=1,nblk-1
-        if(off(i+1)/=off(i)+nb(i).or.h1(i)%iRows/=nb(i).or.h1(i)%iCols/=nb(i+1).or.h1(i)%iHorz/=off(i+1).or. &
-           h1(i)%iVert/=off(i).or.hm1(i)%iRows/=nb(i+1).or.hm1(i)%iCols/=nb(i).or.hm1(i)%iHorz/=off(i).or. &
-           hm1(i)%iVert/=off(i+1)) &
-          call negf_abort(sMyName//": off-diagonal block layout does not match the diagonal blocks")
-      enddo
-      if(off(1)/=1.or.off(nblk)+nb(nblk)-1/=N1.or.nb(1)/=nl.or.nb(nblk)/=nr) &
-        call negf_abort(sMyName//": the first and last blocks must be the lead blocks (nl, nr) and cover 1..N1")
-    endif
-#ifdef MPI
-    call MPI_Bcast(nb(1),nblk,MPI_integer,0,inverse_comm,mpierror)
-    call MPI_Bcast(off(1),nblk,MPI_integer,0,inverse_comm,mpierror)
-#endif
-
-    allocate(ca(0:np-1),cb(0:np-1),kept(0:np-1),ka(0:np-1),kb(0:np-1))
-    call AssignChunks(nb,nblk,np,nchunks,ca,cb)
-    a=ca(me)
-    b=cb(me)
+    call AcquireLayout(gfsparse,nl,nr,N1,replicated,io)
+    nblk=c_nblk
+    nchunks=c_nchunks
+    a=c_ca(me)
+    b=c_cb(me)
     have_chunk=(a<=b)
     bb=min(b,nblk-1)
-    kept=0
+    write_local=(me==0).or.(replicated.and..not.gath)
     nred=0
     do p=0,nchunks-1
-      kept(p)=2
-      if(ca(p)==cb(p)) kept(p)=1
-      ka(p)=nred+1
-      kb(p)=nred+kept(p)
-      nred=nred+kept(p)
+      nred=nred+c_kept(p)
     enddo
 
     if(first_call.and.me==0)then
       total=0.0_kdp
       do i=1,nblk
-        total=total+real(nb(i),kdp)**3
+        total=total+real(c_nb(i),kdp)**3
       enddo
-      write(negf_log_unit,'(a,i0,a,i0,a,i0,a,i0)') 'InvertSparseONDistributed: N1=',N1,' blocks=',nblk, &
-        ' inverse ranks=',np,' chunks=',nchunks
+      write(negf_log_unit,'(a,i0,a,i0,a,i0,a,i0,a,l1)') 'InvertSparseONDistributed: N1=',N1,' blocks=',nblk, &
+        ' inverse ranks=',np,' chunks=',nchunks,' replicated matrix=',replicated
       do p=0,nchunks-1
-        write(negf_log_unit,'(a,i0,a,i0,a,i0,a,f7.4)') '  rank ',p,': blocks ',ca(p),'..',cb(p), &
-          ' cost share ',ChunkCost(nb,ca(p),cb(p))/total
+        write(negf_log_unit,'(a,i0,a,i0,a,i0,a,f7.4)') '  rank ',p,': blocks ',c_ca(p),'..',c_cb(p), &
+          ' cost share ',ChunkCost(c_nb,c_ca(p),c_cb(p))/total
       enddo
       first_call=.false.
     endif
 
-    ! scatter the chunks; the master keeps the storage of its own blocks
-    if(me==0)then
-      do p=1,nchunks-1
-        cnt=ChunkBlockCount(nb,nblk,ca(p),cb(p))
+    ! blocks of the own chunk: from the local copy, or scattered by the master
+    if(have_chunk) allocate(lh0(a:b),lh1(a:bb),lhm1(a:bb))
+    if(replicated)then
+      if(have_chunk) call FillChunkBlocks(gfsparse,a,b,lh0,lh1,lhm1,io)
+    else
+      if(me==0)then
+        do p=1,nchunks-1
+          allocate(th0(c_ca(p):c_cb(p)),th1(c_ca(p):min(c_cb(p),nblk-1)),thm1(c_ca(p):min(c_cb(p),nblk-1)))
+          call FillChunkBlocks(gfsparse,c_ca(p),c_cb(p),th0,th1,thm1,io)
+          cnt=ChunkBlockCount(c_nb,nblk,c_ca(p),c_cb(p))
+          allocate(buf(cnt))
+          pos=0
+          do i=c_ca(p),c_cb(p)
+            call PackBlock(buf,pos,th0(i))
+            call FreeBlock(th0(i))
+          enddo
+          do i=c_ca(p),min(c_cb(p),nblk-1)
+            call PackBlock(buf,pos,th1(i))
+            call PackBlock(buf,pos,thm1(i))
+            call FreeBlock(th1(i))
+            call FreeBlock(thm1(i))
+          enddo
+          deallocate(th0,th1,thm1)
+#ifdef MPI
+          call MPI_Send(buf(1),cnt,DAT_dcomplex,p,tag_blocks,inverse_comm,mpierror)
+#endif
+          deallocate(buf)
+        enddo
+        call FillChunkBlocks(gfsparse,a,b,lh0,lh1,lhm1,io)
+      elseif(have_chunk)then
+        cnt=ChunkBlockCount(c_nb,nblk,a,b)
         allocate(buf(cnt))
+#ifdef MPI
+        call MPI_Recv(buf(1),cnt,DAT_dcomplex,0,tag_blocks,inverse_comm,istatus,mpierror)
+#endif
         pos=0
-        do i=ca(p),cb(p)
-          call PackBlock(buf,pos,h0(i))
+        do i=a,b
+          call UnpackBlock(buf,pos,lh0(i),c_nb(i),c_nb(i),c_off(i),c_off(i))
         enddo
-        do i=ca(p),min(cb(p),nblk-1)
-          call PackBlock(buf,pos,h1(i))
-          call PackBlock(buf,pos,hm1(i))
+        do i=a,bb
+          call UnpackBlock(buf,pos,lh1(i),c_nb(i),c_nb(i+1),c_off(i+1),c_off(i))
+          call UnpackBlock(buf,pos,lhm1(i),c_nb(i+1),c_nb(i),c_off(i),c_off(i+1))
         enddo
-#ifdef MPI
-        call MPI_Send(buf(1),cnt,DAT_dcomplex,p,tag_blocks,inverse_comm,mpierror)
-#endif
         deallocate(buf)
-      enddo
-      allocate(lh0(a:b),lh1(a:bb),lhm1(a:bb))
-      do i=a,b
-        call move_alloc(h0(i)%a,lh0(i)%a)
-        call SetBlock(lh0(i),nb(i),nb(i),off(i),off(i))
-      enddo
-      do i=a,bb
-        call move_alloc(h1(i)%a,lh1(i)%a)
-        call SetBlock(lh1(i),nb(i),nb(i+1),off(i+1),off(i))
-        call move_alloc(hm1(i)%a,lhm1(i)%a)
-        call SetBlock(lhm1(i),nb(i+1),nb(i),off(i),off(i+1))
-      enddo
-      do i=1,nblk
-        call FreeBlock(h0(i))
-      enddo
-      do i=1,nblk-1
-        call FreeBlock(h1(i))
-        call FreeBlock(hm1(i))
-      enddo
-      call DestroyArray(h0,sMyName,io)
-      call DestroyArray(h1,sMyName,io)
-      call DestroyArray(hm1,sMyName,io)
-    elseif(have_chunk)then
-      cnt=ChunkBlockCount(nb,nblk,a,b)
-      allocate(buf(cnt))
-#ifdef MPI
-      call MPI_Recv(buf(1),cnt,DAT_dcomplex,0,tag_blocks,inverse_comm,istatus,mpierror)
-#endif
-      allocate(lh0(a:b),lh1(a:bb),lhm1(a:bb))
-      pos=0
-      do i=a,b
-        call UnpackBlock(buf,pos,lh0(i),nb(i),nb(i),off(i),off(i))
-      enddo
-      do i=a,bb
-        call UnpackBlock(buf,pos,lh1(i),nb(i),nb(i+1),off(i+1),off(i))
-        call UnpackBlock(buf,pos,lhm1(i),nb(i+1),nb(i),off(i),off(i+1))
-      enddo
-      deallocate(buf)
+      endif
     endif
 
     ! Schur complement of every chunk onto its boundary blocks
@@ -184,19 +153,19 @@ contains
     ! reduced block-tridiagonal system, replicated on every rank
     allocate(rD(nred),rU(max(nred-1,0)),rL(max(nred-1,0)))
     do p=0,nchunks-1
-      cnt=nb(ca(p))**2
-      if(kept(p)==2) cnt=cnt+2*nb(ca(p))*nb(cb(p))+nb(cb(p))**2
-      if(cb(p)<nblk) cnt=cnt+2*nb(cb(p))*nb(cb(p)+1)
+      cnt=c_nb(c_ca(p))**2
+      if(c_kept(p)==2) cnt=cnt+2*c_nb(c_ca(p))*c_nb(c_cb(p))+c_nb(c_cb(p))**2
+      if(c_cb(p)<nblk) cnt=cnt+2*c_nb(c_cb(p))*c_nb(c_cb(p)+1)
       allocate(buf(cnt))
       if(p==me)then
         pos=0
         call PackBlock(buf,pos,Saa)
-        if(kept(p)==2)then
+        if(c_kept(p)==2)then
           call PackBlock(buf,pos,Sab)
           call PackBlock(buf,pos,Sba)
           call PackBlock(buf,pos,Sbb)
         endif
-        if(cb(p)<nblk)then
+        if(c_cb(p)<nblk)then
           call PackBlock(buf,pos,lh1(b))
           call PackBlock(buf,pos,lhm1(b))
         endif
@@ -205,22 +174,22 @@ contains
       call MPI_Bcast(buf(1),cnt,DAT_dcomplex,p,inverse_comm,mpierror)
 #endif
       pos=0
-      k=ka(p)
-      call UnpackBlock(buf,pos,rD(k),nb(ca(p)),nb(ca(p)),0,0)
-      if(kept(p)==2)then
-        call UnpackBlock(buf,pos,rU(k),nb(ca(p)),nb(cb(p)),0,0)
-        call UnpackBlock(buf,pos,rL(k),nb(cb(p)),nb(ca(p)),0,0)
-        call UnpackBlock(buf,pos,rD(k+1),nb(cb(p)),nb(cb(p)),0,0)
+      k=c_ka(p)
+      call UnpackBlock(buf,pos,rD(k),c_nb(c_ca(p)),c_nb(c_ca(p)),0,0)
+      if(c_kept(p)==2)then
+        call UnpackBlock(buf,pos,rU(k),c_nb(c_ca(p)),c_nb(c_cb(p)),0,0)
+        call UnpackBlock(buf,pos,rL(k),c_nb(c_cb(p)),c_nb(c_ca(p)),0,0)
+        call UnpackBlock(buf,pos,rD(k+1),c_nb(c_cb(p)),c_nb(c_cb(p)),0,0)
       endif
-      if(cb(p)<nblk)then
-        call UnpackBlock(buf,pos,rU(kb(p)),nb(cb(p)),nb(cb(p)+1),0,0)
-        call UnpackBlock(buf,pos,rL(kb(p)),nb(cb(p)+1),nb(cb(p)),0,0)
+      if(c_cb(p)<nblk)then
+        call UnpackBlock(buf,pos,rU(c_kb(p)),c_nb(c_cb(p)),c_nb(c_cb(p)+1),0,0)
+        call UnpackBlock(buf,pos,rL(c_kb(p)),c_nb(c_cb(p)+1),c_nb(c_cb(p)),0,0)
       endif
       deallocate(buf)
     enddo
 
-    if(have_chunk)then
-      allocate(rSigL(nred),rSigR(nred),rG(nred),rMM(max(nred-1,0)),rML(max(nred-1,0)))
+    allocate(rSigL(nred),rSigR(nred),rG(nred),rMM(max(nred-1,0)),rML(max(nred-1,0)))
+    if(.true.)then
       call ZeroBlock(rSigL(1),rD(1)%iRows)
       do k=1,nred-1
         call InvMinus(M,rD(k),rSigL(k),io)
@@ -252,16 +221,18 @@ contains
           call Mul(rCK(k),kcone,rMM(k),rCK(k+1),io)
         enddo
       endif
+    endif
 
+    if(have_chunk)then
       ! chunk solve seeded with the exact boundary self-energies
       allocate(sL(a:b),M1(a:b),M2(a:b),g0(a:b))
-      call CopyBlock(sL(a),rSigL(ka(me)),io)
+      call CopyBlock(sL(a),rSigL(c_ka(me)),io)
       do i=a,b-1
         call InvMinus(M1(i),lh0(i),sL(i),io)
         call Mul3(sL(i+1),kcone,lhm1(i),M1(i),lh1(i),io)
       enddo
       if(need_offdiag.and.b<nblk) call InvMinus(M1(b),lh0(b),sL(b),io)
-      call CopyBlock(sR,rSigR(kb(me)),io)
+      call CopyBlock(sR,rSigR(c_kb(me)),io)
       do i=b,a,-1
         call InvMinus2(g0(i),lh0(i),sL(i),sR,io)
         if(i>a)then
@@ -273,7 +244,7 @@ contains
       call FreeBlock(sR)
       if(outinfo)then
         write(negf_log_unit,'(a,i0,2es12.3)') 'distributed inversion boundary check, rank ',me, &
-          maxval(abs(rG(ka(me))%a-g0(a)%a)),maxval(abs(rG(kb(me))%a-g0(b)%a))
+          maxval(abs(rG(c_ka(me))%a-g0(a)%a)),maxval(abs(rG(c_kb(me))%a-g0(b)%a))
       endif
       if(need_offdiag)then
         allocate(g1(a:bb),gm1(a:bb))
@@ -282,102 +253,137 @@ contains
           call Mul3(gm1(i),-kcone,g0(i+1),lhm1(i),M1(i),io)
         enddo
         if(b<nblk)then
-          call Mul3(g1(b),-kcone,M1(b),lh1(b),rG(ka(me+1)),io)
-          call Mul3(gm1(b),-kcone,rG(ka(me+1)),lhm1(b),M1(b),io)
+          call Mul3(g1(b),-kcone,M1(b),lh1(b),rG(c_ka(me+1)),io)
+          call Mul3(gm1(b),-kcone,rG(c_ka(me+1)),lhm1(b),M1(b),io)
         endif
       endif
       if(need_col)then
         allocate(c1loc(a:b),cKloc(a:b))
-        call CopyBlock(c1loc(a),rC1(ka(me)),io)
+        call CopyBlock(c1loc(a),rC1(c_ka(me)),io)
         do i=a+1,b
           call Mul3(c1loc(i),-kcone,M2(i),lhm1(i-1),c1loc(i-1),io)
         enddo
-        call CopyBlock(cKloc(b),rCK(kb(me)),io)
+        call CopyBlock(cKloc(b),rCK(c_kb(me)),io)
         do i=b-1,a,-1
           call Mul3(cKloc(i),-kcone,M1(i),lh1(i),cKloc(i+1),io)
         enddo
       endif
     endif
 
-    ! results to the master
-    if(me==0)then
-      if(need_col.or.need_corner) gfout%matdense%a=kczero
-      if(have_chunk)then
-        do i=a,b
-          call SetBlock(g0(i),nb(i),nb(i),off(i),off(i))
-          call CopySparseBlocksSingle(gfsparse,g0(i))
-          if(need_col)then
-            gfout%matdense%a(off(i):off(i)+nb(i)-1,1:nl)=c1loc(i)%a
-            gfout%matdense%a(off(i):off(i)+nb(i)-1,nl+1:nl+nr)=cKloc(i)%a
-          endif
-        enddo
-        if(need_offdiag)then
-          do i=a,bb
-            call SetBlock(g1(i),nb(i),nb(i+1),off(i+1),off(i))
-            call CopySparseBlocksSingle(gfsparse,g1(i))
-            call SetBlock(gm1(i),nb(i+1),nb(i),off(i),off(i+1))
-            call CopySparseBlocksSingle(gfsparse,gm1(i))
-          enddo
-        endif
-      endif
-      do p=1,nchunks-1
-        cnt=ResultCount(nb,nblk,ca(p),cb(p),nl,nr,need_offdiag,need_col)
-        allocate(buf(cnt))
-#ifdef MPI
-        call MPI_Recv(buf(1),cnt,DAT_dcomplex,p,tag_results,inverse_comm,istatus,mpierror)
-#endif
-        pos=0
-        do i=ca(p),cb(p)
-          call UnpackBlock(buf,pos,blk,nb(i),nb(i),off(i),off(i))
-          call CopySparseBlocksSingle(gfsparse,blk)
-          call FreeBlock(blk)
-        enddo
-        if(need_offdiag)then
-          do i=ca(p),min(cb(p),nblk-1)
-            call UnpackBlock(buf,pos,blk,nb(i),nb(i+1),off(i+1),off(i))
-            call CopySparseBlocksSingle(gfsparse,blk)
-            call FreeBlock(blk)
-            call UnpackBlock(buf,pos,blk,nb(i+1),nb(i),off(i),off(i+1))
-            call CopySparseBlocksSingle(gfsparse,blk)
-            call FreeBlock(blk)
-          enddo
-        endif
-        if(need_col)then
-          do i=ca(p),cb(p)
-            call UnpackBlock(buf,pos,blk,nb(i),nl,0,0)
-            gfout%matdense%a(off(i):off(i)+nb(i)-1,1:nl)=blk%a
-            call FreeBlock(blk)
-            call UnpackBlock(buf,pos,blk,nb(i),nr,0,0)
-            gfout%matdense%a(off(i):off(i)+nb(i)-1,nl+1:nl+nr)=blk%a
-            call FreeBlock(blk)
-          enddo
-        endif
-        deallocate(buf)
-      enddo
-      if(need_corner) gfout%matdense%a(1:nr,1:nl)=rC1(nred)%a
-    elseif(have_chunk)then
-      cnt=ResultCount(nb,nblk,a,b,nl,nr,need_offdiag,need_col)
-      allocate(buf(cnt))
-      pos=0
+    ! own results into the local containers
+    if(write_local.and.(need_col.or.need_corner)) gfout%matdense%a=kczero
+    if(write_local.and.have_chunk)then
       do i=a,b
-        call PackBlock(buf,pos,g0(i))
+        call SetBlock(g0(i),c_nb(i),c_nb(i),c_off(i),c_off(i))
+        call CopySparseBlocksSingle(gfsparse,g0(i))
+        if(need_col)then
+          gfout%matdense%a(c_off(i):c_off(i)+c_nb(i)-1,1:nl)=c1loc(i)%a
+          gfout%matdense%a(c_off(i):c_off(i)+c_nb(i)-1,nl+1:nl+nr)=cKloc(i)%a
+        endif
       enddo
       if(need_offdiag)then
         do i=a,bb
-          call PackBlock(buf,pos,g1(i))
-          call PackBlock(buf,pos,gm1(i))
+          call SetBlock(g1(i),c_nb(i),c_nb(i+1),c_off(i+1),c_off(i))
+          call CopySparseBlocksSingle(gfsparse,g1(i))
+          call SetBlock(gm1(i),c_nb(i+1),c_nb(i),c_off(i),c_off(i+1))
+          call CopySparseBlocksSingle(gfsparse,gm1(i))
         enddo
       endif
-      if(need_col)then
-        do i=a,b
-          call PackBlock(buf,pos,c1loc(i))
-          call PackBlock(buf,pos,cKloc(i))
-        enddo
-      endif
+    endif
+    if(write_local.and.need_corner) gfout%matdense%a(1:nr,1:nl)=rC1(nred)%a
+
+    ! lead-column rows of the next chunk's first block, needed by the owner of the inter-chunk pair
+    if(replicated.and..not.gath.and.need_col.and.have_chunk)then
+      if(me>0)then
+        cnt=c_nb(a)*(nl+nr)
+        allocate(buf(cnt))
+        pos=0
+        call PackBlock(buf,pos,c1loc(a))
+        call PackBlock(buf,pos,cKloc(a))
 #ifdef MPI
-      call MPI_Send(buf(1),cnt,DAT_dcomplex,0,tag_results,inverse_comm,mpierror)
+        call MPI_Send(buf(1),cnt,DAT_dcomplex,me-1,tag_columns,inverse_comm,mpierror)
 #endif
-      deallocate(buf)
+        deallocate(buf)
+      endif
+      if(b<nblk)then
+        an=c_ca(me+1)
+        cnt=c_nb(an)*(nl+nr)
+        allocate(buf(cnt))
+#ifdef MPI
+        call MPI_Recv(buf(1),cnt,DAT_dcomplex,me+1,tag_columns,inverse_comm,istatus,mpierror)
+#endif
+        pos=0
+        call UnpackBlock(buf,pos,blk,c_nb(an),nl,0,0)
+        gfout%matdense%a(c_off(an):c_off(an)+c_nb(an)-1,1:nl)=blk%a
+        call FreeBlock(blk)
+        call UnpackBlock(buf,pos,blk,c_nb(an),nr,0,0)
+        gfout%matdense%a(c_off(an):c_off(an)+c_nb(an)-1,nl+1:nl+nr)=blk%a
+        call FreeBlock(blk)
+        deallocate(buf)
+      endif
+    endif
+
+    ! all results to the master
+    if(gath)then
+      if(me==0)then
+        do p=1,nchunks-1
+          cnt=ResultCount(c_nb,nblk,c_ca(p),c_cb(p),nl,nr,need_offdiag,need_col)
+          allocate(buf(cnt))
+#ifdef MPI
+          call MPI_Recv(buf(1),cnt,DAT_dcomplex,p,tag_results,inverse_comm,istatus,mpierror)
+#endif
+          pos=0
+          do i=c_ca(p),c_cb(p)
+            call UnpackBlock(buf,pos,blk,c_nb(i),c_nb(i),c_off(i),c_off(i))
+            call CopySparseBlocksSingle(gfsparse,blk)
+            call FreeBlock(blk)
+          enddo
+          if(need_offdiag)then
+            do i=c_ca(p),min(c_cb(p),nblk-1)
+              call UnpackBlock(buf,pos,blk,c_nb(i),c_nb(i+1),c_off(i+1),c_off(i))
+              call CopySparseBlocksSingle(gfsparse,blk)
+              call FreeBlock(blk)
+              call UnpackBlock(buf,pos,blk,c_nb(i+1),c_nb(i),c_off(i),c_off(i+1))
+              call CopySparseBlocksSingle(gfsparse,blk)
+              call FreeBlock(blk)
+            enddo
+          endif
+          if(need_col)then
+            do i=c_ca(p),c_cb(p)
+              call UnpackBlock(buf,pos,blk,c_nb(i),nl,0,0)
+              gfout%matdense%a(c_off(i):c_off(i)+c_nb(i)-1,1:nl)=blk%a
+              call FreeBlock(blk)
+              call UnpackBlock(buf,pos,blk,c_nb(i),nr,0,0)
+              gfout%matdense%a(c_off(i):c_off(i)+c_nb(i)-1,nl+1:nl+nr)=blk%a
+              call FreeBlock(blk)
+            enddo
+          endif
+          deallocate(buf)
+        enddo
+      elseif(have_chunk)then
+        cnt=ResultCount(c_nb,nblk,a,b,nl,nr,need_offdiag,need_col)
+        allocate(buf(cnt))
+        pos=0
+        do i=a,b
+          call PackBlock(buf,pos,g0(i))
+        enddo
+        if(need_offdiag)then
+          do i=a,bb
+            call PackBlock(buf,pos,g1(i))
+            call PackBlock(buf,pos,gm1(i))
+          enddo
+        endif
+        if(need_col)then
+          do i=a,b
+            call PackBlock(buf,pos,c1loc(i))
+            call PackBlock(buf,pos,cKloc(i))
+          enddo
+        endif
+#ifdef MPI
+        call MPI_Send(buf(1),cnt,DAT_dcomplex,0,tag_results,inverse_comm,mpierror)
+#endif
+        deallocate(buf)
+      endif
     endif
 
     ! release everything
@@ -408,25 +414,25 @@ contains
         enddo
         deallocate(c1loc,cKloc)
       endif
-      do k=1,nred
-        call FreeBlock(rSigL(k))
-        call FreeBlock(rSigR(k))
-        call FreeBlock(rG(k))
-        if(allocated(rC1)) call FreeBlock(rC1(k))
-        if(allocated(rCK)) call FreeBlock(rCK(k))
-      enddo
-      do k=1,nred-1
-        call FreeBlock(rMM(k))
-        call FreeBlock(rML(k))
-      enddo
-      deallocate(rSigL,rSigR,rG,rMM,rML)
-      if(allocated(rC1)) deallocate(rC1)
-      if(allocated(rCK)) deallocate(rCK)
       call FreeBlock(Saa)
       call FreeBlock(Sab)
       call FreeBlock(Sba)
       call FreeBlock(Sbb)
     endif
+    do k=1,nred
+      call FreeBlock(rSigL(k))
+      call FreeBlock(rSigR(k))
+      call FreeBlock(rG(k))
+      if(allocated(rC1)) call FreeBlock(rC1(k))
+      if(allocated(rCK)) call FreeBlock(rCK(k))
+    enddo
+    do k=1,nred-1
+      call FreeBlock(rMM(k))
+      call FreeBlock(rML(k))
+    enddo
+    deallocate(rSigL,rSigR,rG,rMM,rML)
+    if(allocated(rC1)) deallocate(rC1)
+    if(allocated(rCK)) deallocate(rCK)
     do k=1,nred
       call FreeBlock(rD(k))
     enddo
@@ -435,9 +441,160 @@ contains
       call FreeBlock(rL(k))
     enddo
     deallocate(rD,rU,rL)
-    deallocate(nb,off,ca,cb,kept,ka,kb)
 
   end subroutine InvertSparseONDistributed
+
+  !> ownership of the stored entries of a matrix with the cached block layout: entry (i,j) belongs to the
+  !> owner of the lower of the two block indices (the chunk that computed that diagonal block or the
+  !> (k,k+1)/(k+1,k) pair); valid after an inversion of a replicated matrix with the same row count
+  subroutine DistributedEntryOwnerMask(n1,q,j,nnz,mask)
+    integer, intent(in) :: n1,nnz
+    integer, intent(in) :: q(n1+1),j(nnz)
+    logical, intent(out) :: mask(nnz)
+    integer :: i,ind,bi,bj
+
+    if(c_n1/=n1) call negf_abort("DistributedEntryOwnerMask: no block layout of a replicated matrix with this row count")
+    do i=1,n1
+      bi=c_blkofrow(i)
+      do ind=q(i),q(i+1)-1
+        bj=c_blkofrow(j(ind))
+        mask(ind)=(c_ownerofblk(min(bi,bj))==mynode_inverse)
+      enddo
+    enddo
+  end subroutine DistributedEntryOwnerMask
+
+  !> sums buf(ispin,ie,:) over inverse_comm onto the master (the other ranks keep their partial slice)
+  subroutine ReduceEnergySliceToMaster(buf,nspin,ne,nnz,ispin,ie)
+    integer, intent(in) :: nspin,ne,nnz,ispin,ie
+    complex(kdp), intent(inout) :: buf(nspin,ne,nnz)
+    complex(kdp), allocatable :: tmp(:),res(:)
+    integer :: mpierror
+
+#ifdef MPI
+    if(nnodes_inverse<=1.or.nnz<=0) return
+    allocate(tmp(nnz),res(nnz))
+    tmp=buf(ispin,ie,:)
+    res=kczero
+    call MPI_Reduce(tmp(1),res(1),nnz,DAT_dcomplex,MPI_SUM,0,inverse_comm,mpierror)
+    if(mynode_inverse==0) buf(ispin,ie,:)=res
+    deallocate(tmp,res)
+#endif
+  end subroutine ReduceEnergySliceToMaster
+
+  !> block layout for this call: derived from the local copy (replicated) or by the master and broadcast
+  subroutine AcquireLayout(gfsparse,nl,nr,N1,replicated,io)
+    type(matrixTypeGeneral), intent(in) :: gfsparse
+    integer, intent(in) :: nl,nr,N1
+    logical, intent(in) :: replicated
+    type(ioType), intent(inout) :: io
+    character(len=*), parameter :: sMyName="InvertSparseONDistributed"
+    integer, allocatable :: nb(:),off(:)
+    integer :: nblk,mpierror
+    logical :: same
+
+    if(mynode_inverse==0.or.replicated)then
+      if(gfsparse%mattype/=2) call negf_abort(sMyName//": the distributed inverter needs the sparse (EM.OrderN) Green function matrix")
+      same=(c_n1==gfsparse%iRows.and.c_nnz==gfsparse%matSparse%nnz.and.allocated(c_q))
+      if(same) same=all(c_q==gfsparse%matSparse%q(1:c_n1+1)).and.all(c_j==gfsparse%matSparse%j(1:c_nnz))
+      if(.not.same)then
+        call PartitionBlockLayout(gfsparse,nl,nr,nblk,nb,off,io)
+        if(off(1)/=1.or.off(nblk)+nb(nblk)-1/=N1.or.nb(1)/=nl.or.nb(nblk)/=nr) &
+          call negf_abort(sMyName//": the first and last blocks must be the lead blocks (nl, nr) and cover 1..N1")
+        call StoreLayout(nblk,nb,off,N1)
+        c_n1=gfsparse%iRows
+        c_nnz=gfsparse%matSparse%nnz
+        if(allocated(c_q)) deallocate(c_q)
+        if(allocated(c_j)) deallocate(c_j)
+        allocate(c_q(c_n1+1),c_j(c_nnz))
+        c_q=gfsparse%matSparse%q(1:c_n1+1)
+        c_j=gfsparse%matSparse%j(1:c_nnz)
+      endif
+    endif
+    if(.not.replicated)then
+#ifdef MPI
+      nblk=c_nblk
+      call MPI_Bcast(nblk,1,MPI_integer,0,inverse_comm,mpierror)
+      if(allocated(nb)) deallocate(nb,off)
+      allocate(nb(nblk),off(nblk))
+      if(mynode_inverse==0)then
+        nb=c_nb
+        off=c_off
+      endif
+      call MPI_Bcast(nb(1),nblk,MPI_integer,0,inverse_comm,mpierror)
+      call MPI_Bcast(off(1),nblk,MPI_integer,0,inverse_comm,mpierror)
+      if(mynode_inverse/=0)then
+        call StoreLayout(nblk,nb,off,N1)
+        c_n1=-1
+        c_nnz=-1
+      endif
+#endif
+    endif
+  end subroutine AcquireLayout
+
+  subroutine StoreLayout(nblk,nb,off,N1)
+    integer, intent(in) :: nblk,N1
+    integer, intent(in) :: nb(nblk),off(nblk)
+    integer :: i,p,np
+
+    np=nnodes_inverse
+    if(allocated(c_nb)) deallocate(c_nb,c_off,c_ca,c_cb,c_blkofrow,c_ownerofblk)
+    allocate(c_nb(nblk),c_off(nblk),c_ca(0:np-1),c_cb(0:np-1),c_blkofrow(N1),c_ownerofblk(nblk))
+    c_nblk=nblk
+    c_nb=nb
+    c_off=off
+    call AssignChunks(nb,nblk,np,c_nchunks,c_ca,c_cb)
+    c_ownerofblk=-1
+    do p=0,c_nchunks-1
+      do i=c_ca(p),c_cb(p)
+        c_ownerofblk(i)=p
+      enddo
+    enddo
+    do i=1,nblk
+      c_blkofrow(off(i):off(i)+nb(i)-1)=i
+    enddo
+  end subroutine StoreLayout
+
+  integer function c_kept(p)
+    integer, intent(in) :: p
+    c_kept=2
+    if(c_ca(p)==c_cb(p)) c_kept=1
+  end function c_kept
+
+  !> index of the first reduced block of chunk p
+  integer function c_ka(p)
+    integer, intent(in) :: p
+    integer :: ip
+    c_ka=1
+    do ip=0,p-1
+      c_ka=c_ka+c_kept(ip)
+    enddo
+  end function c_ka
+
+  !> index of the last reduced block of chunk p
+  integer function c_kb(p)
+    integer, intent(in) :: p
+    c_kb=c_ka(p)+c_kept(p)-1
+  end function c_kb
+
+  !> dense blocks of the chunk a..b (h0 for a..b, h1/hm1 for a..min(b,nblk-1)) filled from a CRS matrix
+  subroutine FillChunkBlocks(gfsparse,a,b,h0,h1,hm1,io)
+    type(matrixTypeGeneral), intent(in) :: gfsparse
+    integer, intent(in) :: a,b
+    type(matrixType), intent(inout) :: h0(a:),h1(a:),hm1(a:)
+    type(ioType), intent(inout) :: io
+    integer :: i
+
+    do i=a,b
+      call NewBlock(h0(i),c_nb(i),c_nb(i),c_off(i),c_off(i),io)
+      call FillBlock(gfsparse,h0(i))
+    enddo
+    do i=a,min(b,c_nblk-1)
+      call NewBlock(h1(i),c_nb(i),c_nb(i+1),c_off(i+1),c_off(i),io)
+      call FillBlock(gfsparse,h1(i))
+      call NewBlock(hm1(i),c_nb(i+1),c_nb(i),c_off(i),c_off(i+1),io)
+      call FillBlock(gfsparse,hm1(i))
+    enddo
+  end subroutine FillChunkBlocks
 
   !> contiguous chunk assignment balancing sum(n_i^3); every chunk gets at least one block,
   !> ranks beyond the number of blocks get an empty chunk (ca > cb)
@@ -645,6 +802,14 @@ contains
     call AllocLike(dst,src,io)
     dst%a=src%a
   end subroutine CopyBlock
+
+  subroutine NewBlock(blk,rows,cols,horz,vert,io)
+    type(matrixType), intent(inout) :: blk
+    integer, intent(in) :: rows,cols,horz,vert
+    type(ioType), intent(inout) :: io
+    call AllocateMatrix(rows,cols,horz,vert,blk,"mInverseDistributed",io)
+    blk%a=kczero
+  end subroutine NewBlock
 
   subroutine ZeroBlock(blk,n)
     type(matrixType), intent(inout) :: blk
