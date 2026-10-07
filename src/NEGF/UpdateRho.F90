@@ -143,112 +143,70 @@ end subroutine UpdateRhoNEQ_nc
       if(nspin<=2)then
         call updaterhodense(rhogeneralp(ispin),b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
       endif
+    elseif(gfmattype.eq.2)then
+      if(nspin<=2)then
+        call updaterhosparse(rhogeneralp(ispin),b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
+      endif
     endif
 
 
   end SUBROUTINE updaterho_nc
 
 
-  SUBROUTINE updaterhosparse(rhogenerals,ematgenerals,emforces,gf,nl,nr,gfmattype,weightc,cl,cr,weightrho,ene, set_rho_boundary)
-
+  SUBROUTINE updaterhosparse(rhogeneralp,b1,b2,emforces,gf,nl,nr,gfmattype,weightc,clr,const,ene, set_rho_boundary)
+! sparse (order-N) Green's function: same accumulation as updaterhodense on the rho pattern,
+! G(ii,jj) scattered row by row from gf, conj(G(jj,ii)) from its Hermitian conjugate
     use mMatrixUtil
     use mTypes
-
     implicit none
     logical, intent(in):: set_rho_boundary
-    type(matrixTypeGeneral) :: rhogenerals,ematgenerals,gf,gfdagger
     logical, intent(in) :: emforces
-    integer nl,nr,gfmattype,ii,jj,n1,ind2,ind
-    double complex weightc,cl,cr,ene
-!    double complex mat1(rhogenerals%irows,rhogenerals%irows),mat2(rhogenerals%irows,rhogenerals%irows)
-    double complex gfij,drhoij,gfji
-    double precision weightrho
+    type(matrixTypeGeneral), intent(in) :: rhogeneralp, gf
+    double complex, intent(inout):: b1(rhogeneralp%matSparse%nnz)
+    double complex, intent(inout):: b2(rhogeneralp%matSparse%nnz)
+    integer nl,nr,gfmattype,ii,jj,n1,ind
+    double complex weightc,clr,ene
+    double precision const
+    double complex c1,c2
+    type(matrixTypeGeneral) :: gfdagger
     type(ioType) :: io
     DOUBLE COMPLEX, PARAMETER :: zi=(0.D0,1.D0)
     DOUBLE PRECISION, PARAMETER :: PI=3.141592654D0
-    double complex w(rhogenerals%iCols)
-    integer idxrow(rhogenerals%iCols),nj
-
+    double complex, allocatable :: gij(:),gji(:)
     io%isDebug=.false.
-
-    n1=rhogenerals%irows
-
+    n1=rhogeneralp%irows
+    c1=(-zi/(2.0D0*PI))*weightc*const*clr
+    c2=-DCONJG(c1)
     call AllocateMatrixGeneral(n1,n1,gf%matSparse%nnz,gfmattype,gfdagger,"updaterhosparse", io)
     call mathermitianCRS(gf%MatSparse,gfdagger%MatSparse)
-
-!    mat1=0D0
-!    do ii=1,n1
-!      do ind=gf%matSparse%q(ii),gf%matSparse%q(ii+1)-1
-!        jj=gf%matSparse%j(ind)
-!        mat1(ii,jj)=gf%matSparse%b(ind)
-!      enddo
-!    enddo
-!
-!    mat2=0D0
-!    do ii=1,n1
-!      do ind=gfdagger%matSparse%q(ii),gfdagger%matSparse%q(ii+1)-1
-!        jj=gfdagger%matSparse%j(ind)
-!        mat2(ii,jj)=gfdagger%matSparse%b(ind)
-!      enddo
-!    enddo
-!
-!    write(*,*)"gd-gd=",maxval(abs(DCONJG(TRANSPOSE(mat1))-mat2))
-
-
-    w=0D0
-    DO II=1,N1
-
-      nj=0
+    allocate(gij(n1),gji(n1))
+    gij=0.0D0
+    gji=0.0D0
+    do ii=1,n1
       do ind=gf%matSparse%q(ii),gf%matSparse%q(ii+1)-1
-        jj=gf%matSparse%j(ind)
-!        w(jj)=gf%matSparse%b(ind)
-        w(jj)=(-zi/(2.0D0*PI))*weightc*((1D0-weightrho)*cl +   weightrho * cr)*gf%matSparse%b(ind)
-
-        nj=nj+1
-        idxrow(nj)=jj
+        gij(gf%matSparse%j(ind))=gf%matSparse%b(ind)
       enddo
-
-      do ind=rhogenerals%matSparse%q(ii),rhogenerals%matSparse%q(ii+1)-1
-        jj=rhogenerals%matSparse%j(ind)
-        if ((((II .GT. NL) .AND. (II .LE. N1-NR)) .OR.((JJ .GT. NL) .AND. (JJ .LE. N1-NR))).or.set_rho_boundary) THEN
-          rhogenerals%matSparse%b(ind)=rhogenerals%matSparse%b(ind)+w(jj)
-          if(emforces)then
-            ematgenerals%matSparse%b(ind)=ematgenerals%matSparse%b(ind)+w(jj)*ene
-          endif
-        endif
-      enddo
-
-      do jj=1,nj
-        w(idxrow(jj))=0D0
-      enddo
-
-      nj=0
       do ind=gfdagger%matSparse%q(ii),gfdagger%matSparse%q(ii+1)-1
-        jj=gfdagger%matSparse%j(ind)
-        w(jj)=(-zi/(2.0D0*PI))*DCONJG(weightc)*((1D0-weightrho)*(DCONJG(cl)) + weightrho *(DCONJG(cr)))*(-gfdagger%matSparse%b(ind))
-
-        nj=nj+1
-        idxrow(nj)=jj
+        gji(gfdagger%matSparse%j(ind))=gfdagger%matSparse%b(ind)
       enddo
-
-      do ind=rhogenerals%matSparse%q(ii),rhogenerals%matSparse%q(ii+1)-1
-        jj=rhogenerals%matSparse%j(ind)
+      do ind=rhogeneralp%matSparse%q(ii),rhogeneralp%matSparse%q(ii+1)-1
+        jj=rhogeneralp%matSparse%j(ind)
         if ((((II .GT. NL) .AND. (II .LE. N1-NR)) .OR.((JJ .GT. NL) .AND. (JJ .LE. N1-NR))).or.set_rho_boundary) THEN
-          rhogenerals%matSparse%b(ind)=rhogenerals%matSparse%b(ind)+w(jj)
+          b1(ind)=b1(ind)+c1*gij(jj)-c2*gji(jj)
           if(emforces)then
-            ematgenerals%matSparse%b(ind)=ematgenerals%matSparse%b(ind)+w(jj)*DCONJG(ene)
+            b2(ind)=b2(ind)+c1*ene*gij(jj)-c2*DCONJG(ene)*gji(jj)
           endif
         endif
       enddo
-
-      do jj=1,nj
-        w(idxrow(jj))=0D0
+      do ind=gf%matSparse%q(ii),gf%matSparse%q(ii+1)-1
+        gij(gf%matSparse%j(ind))=0.0D0
       enddo
-
-    ENDDO
- 
+      do ind=gfdagger%matSparse%q(ii),gfdagger%matSparse%q(ii+1)-1
+        gji(gfdagger%matSparse%j(ind))=0.0D0
+      enddo
+    enddo
+    deallocate(gij,gji)
     call DestroyMatrixGeneral(gfdagger,"updaterhosparse",io)
-
   end SUBROUTINE updaterhosparse
 
   SUBROUTINE updaterhodense_nc(rhogeneral,ematgeneral,emforces,nspin,gf,n1,nl,nr,gfmattype,weightc,cl,cr,weightrho,ene, set_rho_boundary)
