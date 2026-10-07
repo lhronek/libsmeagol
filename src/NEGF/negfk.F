@@ -106,7 +106,7 @@
       DOUBLE PRECISION, DIMENSION (NspinBlocks) :: Icb,tk
       DOUBLE PRECISION, DIMENSION (NspinBlocks) :: Icfinal
       double precision, allocatable :: Rhopdostotk(:,:)
-      double precision :: emdostotk(4), weight
+      double precision :: emdostotk(4), weight, wl, wr
       double complex, allocatable :: rho_real_l(:,:,:)
       double complex, allocatable :: rho_real_r(:,:,:)
       double complex, allocatable :: rho_im_l(:,:,:)
@@ -741,9 +741,13 @@
         if(.not.SkipNonEquilibriumRho.and.v.ne.0.0D0)then
 
 ! Calculate weight from non-equilibrium density
-         weight=(rhogeneralp_l_real(ispin)%matSparse%b(ii))**2.0D0/
-     &           (rhogeneralp_l_real(ispin)%matSparse%b(ii)**2.0D0+
-     &            rhogeneralp_r_real(ispin)%matSparse%b(ii)**2.0D0)
+         wl=abs(rhogeneralp_l_real(ispin)%matSparse%b(ii))**2
+         wr=abs(rhogeneralp_r_real(ispin)%matSparse%b(ii))**2
+         if(wl+wr.gt.0.0D0)then
+           weight=wl/(wl+wr)
+         else
+           weight=weightrho
+         endif
 
         endif !if(.not.SkipNonEquilibriumRho.and.v.ne.0.0D0)then
 
