@@ -26,6 +26,7 @@
 !
 module mCurrDistTotal
 
+  use mNegfOutput, only: negf_abort
 implicit none
 
 public CurrentDistributionMatrix
@@ -574,8 +575,7 @@ subroutine CurrentDistributionMatrix(DMImag,OmegaImag,H,S,maxnh,numh,listhptr,li
       elseif(NspinRealInputMatrix==4)then
         write(iu,*)ii,JLR(1),JLR(2),JLR(3),JLR(4),em_nbfluxStart(ii),v*rydberg_to_ev
       else
-        write(iu,*)"NspinRealInputMatrix needs to be 1, 2, or 4"
-        call stopnegf
+        call negf_abort("NspinRealInputMatrix needs to be 1, 2, or 4", collective=.true.)
       endif
     endif
 

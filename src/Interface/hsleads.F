@@ -73,9 +73,7 @@ C                                right lead
 C *******************************************************************
 
       use negfmod, only : ThetaLeadsL,PhiLeadsL,ThetaLeadsR,PhiLeadsR
-#ifdef MPI
-      use mpi_siesta, only : MPI_COMM_WORLD
-#endif
+      use mNegfOutput, only: negf_abort, negf_warn
       use ScissorOperator, only: SCOLeads,SCO_Leads
 
 
@@ -110,8 +108,7 @@ C Internal variables
       double precision, allocatable, save::
      .  xijL(:,:), xijR(:,:), SL(:), SR(:), HL(:,:), HR(:,:)
       character
-     .  paste*25
-      integer MPIerror
+     .  paste*25, msgbuf*200
       
       external
      .  io_assign, io_close, hsl, hslk
@@ -196,51 +193,41 @@ c Read data of the right lead
 
 c Compare supercell of leads and EM
         if (nsc(1).ne.nscL(1) .or. nsc(2).ne.nscL(2)) then
-          write(6,'(a)') 'ERROR: The left supercell along parallel'
-          write(6,'(a)') 'directions is different of the supercell'
-          write(6,'(a)') 'of the EM. Change the size of it'
-          write(6,'(a,2i4)') 'nsc = ', nsc(1), nsc(2)
-          write(6,'(a,2i4)') 'nscL = ', nscL(1), nscL(2)
-          write(6,'(a)') 'exiting...'
-#ifdef MPI
-          call MPI_Abort(MPI_Comm_World, 1, MPIerror)
-#endif
-          stop
+          write(msgbuf,'(a,2i4,a,2i4,a)')
+     .      'The left supercell along parallel directions is '//
+     .      'different of the supercell of the EM: nsc =',
+     .      nsc(1), nsc(2), ', nscL =', nscL(1), nscL(2),
+     .      '. Change the size of it'
+          call negf_abort(msgbuf, collective=.true.)
         endif
         if (nsc(1).ne.nscR(1) .or. nsc(2).ne.nscR(2)) then
-          write(6,'(a)') 'ERROR: The right supercell along parallel'
-          write(6,'(a)') 'directions is different of the supercell'
-          write(6,'(a)') 'of the EM. Change the size of it'
-          write(6,'(a,2i4)') 'nsc = ', nsc(1), nsc(2)
-          write(6,'(a,2i4)') 'nscR = ', nscR(1), nscR(2)
-          write(6,'(a)') 'exiting...'
-#ifdef MPI
-          call MPI_Abort(MPI_Comm_World, 1, MPIerror)
-#endif
-          stop
+          write(msgbuf,'(a,2i4,a,2i4,a)')
+     .      'The right supercell along parallel directions is '//
+     .      'different of the supercell of the EM: nsc =',
+     .      nsc(1), nsc(2), ', nscR =', nscR(1), nscR(2),
+     .      '. Change the size of it'
+          call negf_abort(msgbuf, collective=.true.)
         endif
           
 c Verify if the spin at the leads and the EM is the same
         if(.false.)then
           if (nspinL.ne.trnspin) then
-            write(6,'(a)') 'ERROR: The spin at the left lead is not'
-            write(6,'(a)') 'the same as in the extended molecule'
-            stop
+            call negf_abort('The spin at the left lead is not the '//
+     .        'same as in the extended molecule', collective=.true.)
           else if (nspinR.ne.trnspin) then
-            write(6,'(a)') 'ERROR: The spin at the right lead is not'
-            write(6,'(a)') 'the same as in the extended molecule'
-            stop
+            call negf_abort('The spin at the right lead is not the '//
+     .        'same as in the extended molecule', collective=.true.)
           endif
         endif
 
 c Check the temperature
         if (tempL-temp.gt.1.d-4) then
-          write(6,'(a)')'WARNING: The temperature at the left lead is'
-          write(6,'(a)')'not the same as in the extended molecule'
+          call negf_warn('The temperature at the left lead is not '//
+     .      'the same as in the extended molecule', collective=.true.)
         endif
         if (tempR-temp.gt.1.d-4) then
-          write(6,'(a)')'WARNING: The temperature at the right lead is'
-          write(6,'(a)')'not the same as in the extended molecule'
+          call negf_warn('The temperature at the right lead is not '//
+     .      'the same as in the extended molecule', collective=.true.)
         endif
 
 c Initialize overlaps and Hamiltonians

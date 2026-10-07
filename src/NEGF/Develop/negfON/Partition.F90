@@ -50,6 +50,7 @@
 !> \todo
 !> \bug
 module mPartition
+  use mNegfOutput, only: negf_abort, negf_log_unit
   use mConstants
   use mTypes
   use mMatrixUtil
@@ -317,8 +318,8 @@ module mPartition
     enddo
     if (.false.) then
       do k=1,iRows
-        write(*,'(a,i0,x,i0,x,i0)')"  line: ",k,horzss(k,1),horzss(k,2)
-        write(*,'(a,i0,x,i0,x,i0)')"column: ",k,vertss(k,1),vertss(k,2)
+        write(negf_log_unit,'(a,i0,x,i0,x,i0)')"  line: ",k,horzss(k,1),horzss(k,2)
+        write(negf_log_unit,'(a,i0,x,i0,x,i0)')"column: ",k,vertss(k,1),vertss(k,2)
       enddo
     endif
     close(8)
@@ -396,11 +397,11 @@ module mPartition
          write(io%iout,'(a,i0,1x,i0)') 'Error: h0nrows /= h0ncols', h0nrows,h0ncols
       end if
       if (.false.) then
-         write (*,'(a,i0)') 'h0 ivert:',itmpVert
-         write (*,'(a,i0)') 'h0 ihorz:',itmpHorz
-         write (*,'(a,i0)') 'h0nrows:',h0nrows
-         write (*,'(a,i0)') 'h0ncols:',h0ncols
-         write (*,'(a,i0)') 'h0size:',h0size
+         write(negf_log_unit,'(a,i0)') 'h0 ivert:',itmpVert
+         write(negf_log_unit,'(a,i0)') 'h0 ihorz:',itmpHorz
+         write(negf_log_unit,'(a,i0)') 'h0nrows:',h0nrows
+         write(negf_log_unit,'(a,i0)') 'h0ncols:',h0ncols
+         write(negf_log_unit,'(a,i0)') 'h0size:',h0size
       endif
 
       ! set known h1 hm1 origins based on h0 origin
@@ -450,18 +451,18 @@ module mPartition
       hm1ncols = max(hm1ncols, h1nrows)
         ! debug info
       if (.false.) then
-        write (*,'(a,i0)') 'h1ivert:',itmpH1Vert
-        write (*,'(a,i0)') 'h1 ihorz:',itmpH1Horz
-        write (*,'(a,i0)') 'h1nrows:',h1nrows
-        write (*,'(a,i0)') 'h1ncols:',h1ncols
+        write(negf_log_unit,'(a,i0)') 'h1ivert:',itmpH1Vert
+        write(negf_log_unit,'(a,i0)') 'h1 ihorz:',itmpH1Horz
+        write(negf_log_unit,'(a,i0)') 'h1nrows:',h1nrows
+        write(negf_log_unit,'(a,i0)') 'h1ncols:',h1ncols
       endif
 
         ! debug info
       if (.false.) then
-        write (*,'(a,i0)') 'hm1ivert:',itmpHm1Vert
-        write (*,'(a,i0)') 'hm1 ihorz:',itmpHm1Horz
-        write (*,'(a,i0)') 'hm1nrows:',hm1nrows
-        write (*,'(a,i0)') 'hm1ncols:',hm1ncols
+        write(negf_log_unit,'(a,i0)') 'hm1ivert:',itmpHm1Vert
+        write(negf_log_unit,'(a,i0)') 'hm1 ihorz:',itmpHm1Horz
+        write(negf_log_unit,'(a,i0)') 'hm1nrows:',hm1nrows
+        write(negf_log_unit,'(a,i0)') 'hm1ncols:',hm1ncols
       endif
 !      write(*,*)"blocksize=",iBlocks,itmpHorz,itmpVert,h0nrows,h0ncols
       h0nrowslast=h0nrows
@@ -484,7 +485,7 @@ module mPartition
       h0nrows = hm1nrows
         ! debug info
       if (.false.) then
-        write(*,'(a,i0,a,i0)') 'next origin: V: ',  itmpVert, 'H: ', itmpHorz
+        write(negf_log_unit,'(a,i0,a,i0)') 'next origin: V: ',  itmpVert, 'H: ', itmpHorz
       endif
     end do
 
@@ -959,10 +960,7 @@ module mPartition
     if (io%isDebug) then
       write(io%iout,'(a,i0)')trim(sMyName)//"cookie: ", imagic
     endif
-    if (magic /= imagic) then
-      write(io%iout,'(a,i0,a,i0)')"Wrong cookie read: ", imagic, "expected ", magic
-      stop
-    endif
+    if (magic /= imagic) call negf_abort("wrong cookie read from "//trim(sFile), imagic)
     read(13,iostat=ierror)iRows,iCols,iNonZero
 #ifdef Reading
     call ErrorRead(ierror,sMyName,sfile,io%iout)
@@ -1041,8 +1039,7 @@ module mPartition
     type(matrixType) :: tmpA
     integer :: i
 
-!    write(*,*)"binary"
-    stop
+    call negf_abort("binary sparse partition input is not implemented")
     call GetHorzssVertssSparseRowStoredBinary(sFile,horzss,vertss,iRows,iCols,magic,endian,io)
     call CountBlocks(vertss,horzss,iBlocks,iRows,iCols,nl,nr,io)
 

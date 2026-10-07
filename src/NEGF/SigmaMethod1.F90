@@ -234,6 +234,7 @@ module mSigmaMethod1
 
 
   subroutine kofewrap(side,gf,k0,k1in,km1in,n,ene, dsigma,nrchan,S0,S1)
+    use mNegfOutput, only: negf_warn
 
 
 ! **********************************************************************
@@ -257,6 +258,7 @@ module mSigmaMethod1
     DOUBLE COMPLEX, DIMENSION(n) :: zvo
     DOUBLE COMPLEX  ene
     DOUBLE PRECISION  dsigma,svdtolzi2,tolki
+    CHARACTER(len=160) :: msgbuf
     LOGICAL, ALLOCATABLE, SAVE :: firstcall(:)
     LOGICAL, SAVE :: usehinv, usevinv ,complexbands,callsvd,dosleads
     DOUBLE PRECISION, SAVE :: tolkisave, svdtolmax,svdtolmin,dsigmamax,rnoise,skipsvd,svdtolzi,eimag
@@ -300,20 +302,19 @@ module mSigmaMethod1
           write(12347,*)"svdtr1= 0,",svdtolzi2,dsigma,1D1 * eimag
           do i=1,NRunSigmaMax
             svdtolzi2=svdtolzi2 / 1D2
-            write(*,*)"warning: changing SVD tolerance for selfenergy to",svdtolzi2
             write(12347,*)"warning: changing SVD tolerance for selfenergy to",svdtolzi2
             if(svdtolzi2.lt.1d-16)exit
             k0=k0in
             call kofe_svdlr2(side,k0,k1in,km1in,n,ene, svdtolzi2, dsigma,nrchan,SigmaWideBand,usehinv,usevinv,tolki,svdtolmax,svdtolmin, dsigmamax,callsvd,rnoise,skipsvd,complexbands,dsigmade,em_Last_SCF_Step,ikpmod,vlevout)
             if(dsigma.lt.dsigmamax.or.dsigma.lt.1D1 * eimag) then
-              write(*,*)"Selfenergy calculated to the required accuracy with the updated SVD tolerance"
               write(12347,*)"Selfenergy calculated to the required accuracy with the updated SVD tolerance"
               exit
             endif
             write(12347,*)"svdtr1=",i,svdtolzi2,dsigma,1D1 * eimag
             if(i==3)then
-             write(*,*)"warning: selfenergy was not calculated to the required accuracy"
-             write(12347,*)"warning: selfenergy was not calculated to the required accuracy"
+             write(msgbuf,'(3a,2es14.6)')"self-energy not calculated to the required accuracy: side ",side, &
+               ", energy =",dreal(ene),dimag(ene)
+             call negf_warn(msgbuf)
             endif
           enddo
           write(12347,*)"svdtexit=",svdtolzi2,dsigma
@@ -554,9 +555,6 @@ module mSigmaMethod1
     endif
 
     if(.not.calcsucceed)then
-      write(*,*)"warning: calculation of selfenergies failed for the used SVD tolerance"
-      write(*,*)"Side ",side," energy= ",dreal(ene),dimag(ene)
-      write(*,*)"warning: using wide-band limit for the selfenergy for the used SVD tolerance"
       write(12347,*)"warning: calculation of selfenergies failed for the used SVD tolerance"
       write(12347,*)"Side ",side," energy= ",dreal(ene),dimag(ene)
       write(12347,*)"warning: using wide-band limit for the selfenergy for the used SVD tolerance"

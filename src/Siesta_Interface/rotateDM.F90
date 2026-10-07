@@ -208,6 +208,7 @@ end subroutine rotatePartialDM3
 
 
 subroutine rotatePartialDM(dm,maxnh,numh,listhptr,listh,NspinRealInputMatrix,no,N1,n1loc,indxuo,thetadeg,phideg,istart,iend,mynode,nnodes)
+  use mNegfOutput, only: negf_log_unit
 
   use mConstants
   use mMPI_NEGF
@@ -273,7 +274,7 @@ subroutine rotatePartialDM(dm,maxnh,numh,listhptr,listh,NspinRealInputMatrix,no,
 !        dm(ind,2)=0.5_kdp * (dm(ind,2)+dm4new-mtot(3)*dm3new)
 !        dm(ind,4)=0.5_kdp * (dm(ind,4)-mtot(2)*dm3new)
 !        dm(ind,3)=0.5_kdp * (dm(ind,3)+mtot(1)*dm3new)
-        write(*,*)"dmmdmorig=",ind,iguo,jguo,dm(ind,1)-dmorig(ind,1),dm(ind,2)-dmorig(ind,2),dm(ind,3)-dmorig(ind,3),dm(ind,4)-dmorig(ind,4)
+        write(negf_log_unit,*)"dmmdmorig=",ind,iguo,jguo,dm(ind,1)-dmorig(ind,1),dm(ind,2)-dmorig(ind,2),dm(ind,3)-dmorig(ind,3),dm(ind,4)-dmorig(ind,4)
       endif
        
     enddo

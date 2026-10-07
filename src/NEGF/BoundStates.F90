@@ -46,6 +46,7 @@
 ! FOR INFORMATION OR QUERIES PLEASE CONTACT THE E-MAIL: smeagol@tcd.ie
 !
 module mBoundStates
+  use mNegfOutput, only: negf_log_unit, negf_warn
   use mConstants
   use mTypes
   use mMatrixUtil
@@ -688,7 +689,7 @@ module mBoundStates
 #endif
     write(*,*)"in getenebs",ik
     write(*,*)"grebs1=",ebs(1),ebs(1)
-    write(*,*)"grebs2=",ebs(2),ebs(2)
+    write(negf_log_unit,*)"grebs2=",ebs(2),ebs(2)
 
 
     nbsin2=nbsin
@@ -716,18 +717,18 @@ module mBoundStates
       eimin=bs_tol
     endif
     call reduceene(eimin, ene1d,eiene1d,2 * N1, ene1dr,eiene1dr,nener)
-    write(*,*)"nenerbs=",nener
+    write(negf_log_unit,*)"nenerbs=",nener
     call f77flush
     call eiofe(ene1dr,eiene1dr,nener,eizero, ezero, nzero)
-    write(*,*)"nzerobs=",nzero
+    write(negf_log_unit,*)"nzerobs=",nzero
 
     do i=1,nzero
 
       if(((ABS(DIMAG(eizero(i,1))).le.bs_tol).and. (ABS(DIMAG(eizero(i,1))).ge.bs_min)).NEQV. ((ABS(DIMAG(eizero(i,2))).le.bs_tol).and. (ABS(DIMAG(eizero(i,2))).ge.bs_min)))then
 
-        write(*,*)"calling subroutine recursively"
-        write(*,*)"ebs_recursive:",ebs(1),ebs(2), (ebs(1)+ebs(2))* 0.5D0,DREAL(eizero(i,3))
-        write(*,*)"ebs_recursive_imag:",DIMAG(eizero(i,1)), DIMAG(eizero(i,2))
+        write(negf_log_unit,*)"calling subroutine recursively"
+        write(negf_log_unit,*)"ebs_recursive:",ebs(1),ebs(2), (ebs(1)+ebs(2))* 0.5D0,DREAL(eizero(i,3))
+        write(negf_log_unit,*)"ebs_recursive_imag:",DIMAG(eizero(i,1)), DIMAG(eizero(i,2))
 
         ebs2(1)=ebs(1)
 !          ebs2(2)=DREAL(eizero(i,3))
@@ -750,7 +751,7 @@ module mBoundStates
       if(((ABS(DIMAG(eizero(i,1))).le.bs_tol).and. (ABS(DIMAG(eizero(i,1))).ge.bs_min)).and. ((ABS(DIMAG(eizero(i,2))).le.bs_tol).and. (ABS(DIMAG(eizero(i,2))).ge.bs_min)))then
 
         if(ABS(DIMAG(eizero(i,1))).eq.0D0.or. ABS(DIMAG(eizero(i,2))).eq.0D0) then
-          write(*,*)"warning, one of the imaginary parts of the eigenvalues is 0."
+          write(negf_log_unit,*)"warning, one of the imaginary parts of the eigenvalues is 0."
           if(ABS(DIMAG(eizero(i,1))).eq.0D0.and. ABS(DIMAG(eizero(i,2))).eq.0D0) then
             releimag=1D0
           else
@@ -762,9 +763,9 @@ module mBoundStates
 
         if(releimag.gt.1D1.or.releimag.lt.1D-1)then
 
-          write(*,*)"calling subroutine recursively due to too big difference in eimag"
-          write(*,*)"ebs_recursive:",ebs(1),ebs(2), (ebs(1)+ebs(2))* 0.5D0,DREAL(eizero(i,3))
-          write(*,*)"ebs_recursive_imag:",DIMAG(eizero(i,1)), DIMAG(eizero(i,2))
+          write(negf_log_unit,*)"calling subroutine recursively due to too big difference in eimag"
+          write(negf_log_unit,*)"ebs_recursive:",ebs(1),ebs(2), (ebs(1)+ebs(2))* 0.5D0,DREAL(eizero(i,3))
+          write(negf_log_unit,*)"ebs_recursive_imag:",DIMAG(eizero(i,1)), DIMAG(eizero(i,2))
 
           ebs2(1)=ebs(1)
 !            ebs2(2)=DREAL(eizero(i,3))
@@ -791,7 +792,7 @@ module mBoundStates
       endif
 
     enddo
-    write(*,*)"numberi of bs for kp=",ik,nbs2
+    write(negf_log_unit,*)"numberi of bs for kp=",ik,nbs2
 
     nbsout=nbsin+nbs2
     if(nbs2.eq.0)then
@@ -800,7 +801,7 @@ module mBoundStates
       allocate(eizerobs(nbs2,3),ezerobs(nbs2,2))
       allocate(psibs(nbs2,N1),psibst(nbs2,N1), glpsipst(nbs2,N1),grpsipst(nbs2,N1))
     else
-      write(*,*)"ninfo",ik,nbsin,nbs2,nbsout
+      write(negf_log_unit,*)"ninfo",ik,nbsin,nbs2,nbsout
       call f77flush
       allocate(eizerobs2(nbsin,3),ezerobs2(nbsin,2))
       allocate(psibs2(nbsin,N1),psibst2(nbsin,N1), glpsipst2(nbsin,N1),grpsipst2(nbsin,N1))
@@ -813,11 +814,11 @@ module mBoundStates
       grpsipst2=grpsipst
       deallocate(eizerobs,ezerobs,psibs,psibst,glpsipst,grpsipst)
 
-      write(*,*)"ninfo2",ik,nbsin,nbs2,nbsout
+      write(negf_log_unit,*)"ninfo2",ik,nbsin,nbs2,nbsout
       call f77flush
       allocate(eizerobs(nbsin+nbs2,3),ezerobs(nbsin+nbs2,2))
       allocate(psibs(nbsin+nbs2,N1),psibst(nbsin+nbs2,N1) ,glpsipst(nbsin+nbs2,N1),grpsipst(nbsin+nbs2,N1))
-      write(*,*)"ninfo3",ik,nbsin,nbs2,nbsout
+      write(negf_log_unit,*)"ninfo3",ik,nbsin,nbs2,nbsout
       call f77flush
       eizerobs(1:nbsin,:)=eizerobs2(1:nbsin,:)
       ezerobs(1:nbsin,:)=ezerobs2(1:nbsin,:)
@@ -827,7 +828,7 @@ module mBoundStates
       grpsipst(1:nbsin,:)=grpsipst2(1:nbsin,:)
       deallocate(eizerobs2,ezerobs2,psibs2,psibst2)
       deallocate(glpsipst2,grpsipst2)
-      write(*,*)"ninfo4",ik,nbsin,nbs2,nbsout
+      write(negf_log_unit,*)"ninfo4",ik,nbsin,nbs2,nbsout
       call f77flush
     endif
 
@@ -841,14 +842,14 @@ module mBoundStates
       endif
 
     enddo
-      write(*,*)"ninfo4enddo",ik,nbsin,nbs2,nbsout
+      write(negf_log_unit,*)"ninfo4enddo",ik,nbsin,nbs2,nbsout
       call f77flush
 
     do i=nbsin+1,nbsout
 
-        write(*,*)"ebs_1=",ezerobs(i,1),DREAL(eizerobs(i,1)), DIMAG(eizerobs(i,1))
-        write(*,*)"ebs_2=",ezerobs(i,2),DREAL(eizerobs(i,2)), DIMAG(eizerobs(i,2))
-        write(*,*)"ebs_a=",DREAL(eizerobs(i,3)),DREAL(eizerobs(i,3)), DIMAG(eizerobs(i,3))
+        write(negf_log_unit,*)"ebs_1=",ezerobs(i,1),DREAL(eizerobs(i,1)), DIMAG(eizerobs(i,1))
+        write(negf_log_unit,*)"ebs_2=",ezerobs(i,2),DREAL(eizerobs(i,2)), DIMAG(eizerobs(i,2))
+        write(negf_log_unit,*)"ebs_a=",DREAL(eizerobs(i,3)),DREAL(eizerobs(i,3)), DIMAG(eizerobs(i,3))
 
     enddo
 
@@ -860,26 +861,26 @@ module mBoundStates
           if(eizerobs(i,1).eq.zv(j))then
             indz=j 
 !              exit
-            write(*,*)"indzinloop=",indz
+            write(negf_log_unit,*)"indzinloop=",indz
           endif
         enddo
-        write(*,*)"indz=",indz
+        write(negf_log_unit,*)"indz=",indz
         do j=1,n1
           if(eizerobs(i,2).eq.zv2(j))then
             indz2=j 
 !              exit
-            write(*,*)"indzinloop=",indz2
+            write(negf_log_unit,*)"indzinloop=",indz2
           endif
         enddo
-        write(*,*)"indz2=",indz2
+        write(negf_log_unit,*)"indz2=",indz2
 
      
         if(ABS(DIMAG(eizerobs(i,1))).lt.ABS(DIMAG(eizerobs(i,2))))then
-          write(*,*)"using energy 1"
+          write(negf_log_unit,*)"using energy 1"
           psib1(:)=veigr(:,indz)
           psib2(:)=veigr2(:,indz)
         else
-          write(*,*)"using energy 2"
+          write(negf_log_unit,*)"using energy 2"
           psib1(:)=veigrb(:,indz2)
           psib2(:)=veigr2b(:,indz2)
           gamma_l=gamma_lb
@@ -1051,12 +1052,12 @@ module mBoundStates
               eimin=5d0 * bs_tol
             endif
             call reduceene(eimin, ene1d,eiene1d,indetotal * N1, ene1dr,eiene1dr,nener)
-            write(*,*)"nenerng,total=",nener,indetotal * N1
+            write(negf_log_unit,*)"nenerng,total=",nener,indetotal * N1
 
 
             call eiofe(ene1dr,eiene1dr,nener,eizero, ezero, nzero)
             deallocate(ene1dr,eiene1dr)
-            write(*,*)"nzero=",nzero
+            write(negf_log_unit,*)"nzero=",nzero
 
             if(nzero.lt.100 * nebssave)then
             ie=0
@@ -1117,7 +1118,7 @@ module mBoundStates
 #endif
 
         if(bsrun.eq.2)then
-          write(*,*)"bsrun=",bsrun
+          call negf_warn("bound-state run finished (bsrun = 2), stopping", collective=.true.)
 #ifdef MPI
           call MPI_Finalize( MPIerror )
 #endif
@@ -1137,14 +1138,14 @@ module mBoundStates
           enddo
           nbsnode=nbstot/Nnodes
           nbsrest=nbstot-nbsnode * Nnodes 
-          write(*,*)"nbstot=",nbstot,nbsnode,nbsrest
+          write(negf_log_unit,*)"nbstot=",nbstot,nbsnode,nbsrest
           nbspnode(:,:,ik)=0
           ino=1
           do ISPIN=1,NSPIN
             do j=1,iebs(ISPIN,ik)
 
-              write(*,*) "ebssapar:=",ebssave(j,:,ISPIN,ik),ISPIN,ik
-              write(*,*)"adding to node",ino
+              write(negf_log_unit,*) "ebssapar:=",ebssave(j,:,ISPIN,ik),ISPIN,ik
+              write(negf_log_unit,*)"adding to node",ino
 
               nbspnode(ino,ispin,ik)=nbspnode(ino,ispin,ik)+1
               ebssaveno(ino,nbspnode(ino,ispin,ik),:,ISPIN,ik)= ebssave(j,:,ISPIN,ik)
@@ -1153,13 +1154,13 @@ module mBoundStates
           enddo
           do ino=1,Nnodes
             if(nspin.eq.2)then
-              write(*,*)"nnodebs=",ino,nbspnode(ino,1,ik), nbspnode(ino,2,ik)
+              write(negf_log_unit,*)"nnodebs=",ino,nbspnode(ino,1,ik), nbspnode(ino,2,ik)
             else
-              write(*,*)"nnodebs=",ino,nbspnode(ino,1,ik)
+              write(negf_log_unit,*)"nnodebs=",ino,nbspnode(ino,1,ik)
             endif
             do ispin=1,NSPIN
               do j=1,nbspnode(ino,ISPIN,ik)
-                write(*,*) "nebssapar:=",ino, ebssaveno(ino,j,:,ISPIN,ik),ISPIN,ik
+                write(negf_log_unit,*) "nebssapar:=",ino, ebssaveno(ino,j,:,ISPIN,ik),ISPIN,ik
                 
               enddo
             enddo
@@ -1226,9 +1227,9 @@ module mBoundStates
               write(12347,*) "lebs_saved:=",ebssaven(ie,:,ISPIN,ik),ISPIN,ik
 
               nbsin=nbsout
-              write(*,*)"ie_nbs=",ie,nbsin
+              write(negf_log_unit,*)"ie_nbs=",ie,nbsin
               CALL getenebs(ebssaven(ie,:,ISPIN,ik), V,Ef_Lead,T,NL,H0_L(:,:,ISPIN), H1_L(:,:,ISPIN),S0_L,S1_L, NR,H0_R(:,:,ISPIN), H1_R(:,:,ISPIN),S0_R,S1_R, deltaene,ik, H_chain(:,:,ISPIN),S0_chain,S0_chain_inv,N1, bs_tol, bs_min,bs_nmid,nbs,iebsn(ISPIN,ik),Delta, eizerobs,ezerobs,nbsin,nbsout,nbs2,psibs,psibst, glpsibst,grpsibst)
-              write(*,*)"ie_nbsout=",ik,ISPIN,iebsn(ISPIN,ik),nbsout
+              write(negf_log_unit,*)"ie_nbsout=",ik,ISPIN,iebsn(ISPIN,ik),nbsout
                 
 
             enddo
@@ -1340,8 +1341,8 @@ module mBoundStates
         zvimag(II)=DOT_PRODUCT(psib1(1:NL),vbufL)+ DOT_PRODUCT(psib1(N1-NR+1:N1),vbufR)
         normvt=DOT_PRODUCT(veigt(:,II),psib1)
         zvimag(II)=-0.5D0 * zvimag(II)/normvt
-        write(*,*)"zvgamma",zv(II),zvimag(II)
-        write(*,*)"relat",DIMAG(zv(II))/DREAL(zvimag(II))
+        write(negf_log_unit,*)"zvgamma",zv(II),zvimag(II)
+        write(negf_log_unit,*)"relat",DIMAG(zv(II))/DREAL(zvimag(II))
 
       ENDDO
       call f77flush
@@ -1425,7 +1426,7 @@ module mBoundStates
         write(12347,*)"ebsg_1=",ezerobs(i,1),DREAL(eizerobs(i,1)), DIMAG(eizerobs(i,1))
         write(12347,*)"ebsg_2=",ezerobs(i,2),DREAL(eizerobs(i,2)), DIMAG(eizerobs(i,2))
         write(12347,*)"ebsg_a=",DREAL(eizerobs(i,3)), DREAL(eizerobs(i,3)),DIMAG(eizerobs(i,3))
-        write(*,*)"ebsg_a=",DREAL(eizerobs(i,3)), DREAL(eizerobs(i,3)),DIMAG(eizerobs(i,3))
+        write(negf_log_unit,*)"ebsg_a=",DREAL(eizerobs(i,3)), DREAL(eizerobs(i,3)),DIMAG(eizerobs(i,3))
         write(12347,*)"eibsg_a=",DREAL(eizerobs(i,3)), DREAL(eizerobs(i,3)),DIMAG(eizerobs(i,3)), ezerobs(i,1),DREAL(eizerobs(i,1)), DIMAG(eizerobs(i,1)), ezerobs(i,2),DREAL(eizerobs(i,2)), DIMAG(eizerobs(i,2)), ispin,ik,itermod
     enddo
 
@@ -1596,7 +1597,7 @@ if (outinfo) write(12347,*)"|1-dei_de|=",dei_de,dei_den,dei_dem
         endif
         if (outinfo) write(12347,*)"alphac=",alpha-DREAL(alphasc),alpha, DREAL(alphasc),DREAL(zevL),DREAL(zevR)
 
-        write(*,*)"bssc=",bssc
+        write(negf_log_unit,*)"bssc=",bssc
         if(bssc.eq.0)then
           alpha=DREAL(alphasc)
         elseif(bssc.eq.2)then
@@ -2194,7 +2195,7 @@ endif
 !      ef_bss(4:5,:)=ef_bss(nleads,1)
 
     do i1=1,2000
-      write(*,*)"i1=",i1
+      write(negf_log_unit,*)"i1=",i1
 
       call find_efout(tij,nspin,nleads,nbss,Nenerg_div,ef_bss, ef_lead,ef_bssout,t,v)
 
@@ -2289,7 +2290,7 @@ endif
       do ief=1,1000
         tidf=0D0
 !          write(12347,*)"tidf"
-        write(*,*)"ief=",ief
+        write(negf_log_unit,*)"ief=",ief
         do ie=1,Nenerg_div
           Ei=ERealGrid%e(ie)
           do ispin =1,nspin

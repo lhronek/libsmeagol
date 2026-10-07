@@ -133,6 +133,7 @@
       end
 
       subroutine eiofe(e,ei,neitot,eizeron,ezero,nzero)
+      use mNegfOutput, only: negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -164,7 +165,7 @@
       call rankdouble(e,nrank,neitot)
 
       call get_neneunique(e,nrank,neitot,nene)
-      write(*,*)"#nene=",nene
+      write(negf_log_unit,*)"#nene=",nene
       allocate(neie(nene),eies(nene))
       call get_eneiofeall(e,nrank,neitot,eies,neie,nene)
 

@@ -37,6 +37,7 @@
 !> \todo
 !> \bug
 module mReadData
+  use mNegfOutput, only: negf_abort
   use mConstants
   use mTypes
   use mMatrixUtil
@@ -129,10 +130,7 @@ module mReadData
     call AllocateMatrix(iRows,iCols,mat,sMyName,io)
     do i=1,iNonZero
       read(8,*,iostat=ierror)k,l,rex,imx
-      if (ierror /= 0) then
-        write(io%iout,'(a,i0,a,i0)') 'Error: read() ierror = ', ierror, "at line ", i+2
-        stop
-      end if
+      if (ierror /= 0) call negf_abort("error reading "//trim(sFile)//" at line "//trim(itoa(i+2)), ierror)
       mat%a(k,l)=cmplx(rex,imx,kdp)
     enddo
     close(8)
@@ -160,10 +158,7 @@ module mReadData
     if (io%isDebug) then
       write(io%iout,'(a,i0)')trim(sMyName)//"cookie: ", imagic
     endif
-    if (magic /= imagic) then
-      write(io%iout,'(a,i0,a,i0)')"Wrong cookie read: ", imagic, "expected ", magic
-      stop
-    endif
+    if (magic /= imagic) call negf_abort("wrong cookie read from "//trim(sfile)//", expected "//trim(itoa(magic)), imagic)
     read(10,iostat=ierror)iRows,iCols,iNonZero
 #ifdef Reading
     call ErrorRead(ierror,sMyName,sfile,io%iout)
@@ -220,4 +215,9 @@ module mReadData
     close(10)
   end subroutine ReadBinaryPestsc
 
+  function itoa(i) result(s)
+    integer, intent(in) :: i
+    character(len=12) :: s
+    write (s, '(i0)') i
+  end function itoa
 end module mReadData

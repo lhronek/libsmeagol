@@ -180,6 +180,7 @@
 
 
       subroutine writemat2(mat,n,m,nam)
+      use mNegfOutput, only: negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -194,13 +195,13 @@
       CHARACTER(LEN=*) :: nam
 
       i=n
-      write(*,*)"start ",nam
+      write(negf_log_unit,*)"start ",nam
         do jm=1,m
       do i=1,n
-          write(*,*)"[",i,",",jm,"]=",mat(i,jm)
+          write(negf_log_unit,*)"[",i,",",jm,"]=",mat(i,jm)
         enddo
       enddo
-      write(*,*)"end ",nam
+      write(negf_log_unit,*)"end ",nam
 
 
       END subroutine writemat2
@@ -256,6 +257,7 @@
       END subroutine writemat7b
 
       subroutine writematcomplex(mat,n,m,nam)
+      use mNegfOutput, only: negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -271,7 +273,7 @@
 
       do i=1,n
         do jm=1,m
-          write(*,'(a,"[",i9,",",i9,"]=",3e15.6)')nam,i,jm,
+          write(negf_log_unit,'(a,"[",i9,",",i9,"]=",3e15.6)')nam,i,jm,
      .              dreal(mat(i,jm)),dimag(mat(i,jm))
         enddo
       enddo
@@ -423,6 +425,7 @@
 
 
       subroutine writemat3(ene,mat,n,m,nam)
+      use mNegfOutput, only: negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -440,7 +443,8 @@
       do jm=1,m
         do i=1,n
           if(ABS(mat(i,jm)).gt.1D0)
-     .    write(*,'(a,"[",i9,",",i9,"]=",3e15.6)')nam,i,jm,ene,
+     .    write(negf_log_unit,
+     .      '(a,"[",i9,",",i9,"]=",3e15.6)')nam,i,jm,ene,
      .              DREAL(mat(i,jm)),DIMAG(mat(i,jm))
         enddo
       enddo
@@ -448,6 +452,7 @@
       END subroutine writemat3
 
       subroutine writemat4(ene,mat,n,m,nam)
+      use mNegfOutput, only: negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -472,7 +477,8 @@
           if(((jm.le.el).and.(i.ge.sr)).or.((i.le.el).and.(jm.ge.sr)))
      .       then
           if(ABS(mat(i,jm)).gt.0.0)
-     .    write(*,'(a,"[",i9,",",i9,"]=",3e15.6)')nam,i,jm,ene,
+     .    write(negf_log_unit,
+     .      '(a,"[",i9,",",i9,"]=",3e15.6)')nam,i,jm,ene,
      .              DREAL(mat(i,jm)),DIMAG(mat(i,jm))
           endif
         enddo
@@ -482,6 +488,7 @@
 
 
       subroutine writemat5(ene,mat,n,m,nam)
+      use mNegfOutput, only: negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -500,10 +507,12 @@
         do i=1,n
           if(jm.ne.i.or..true.)then
             if(ABS(mat(i,jm)).gt.1D-10)
-     .        write(*,'(a,"[",i9,",",i9,"]=",3e15.6)')nam,i,jm,ene,
+     .        write(negf_log_unit,
+     .      '(a,"[",i9,",",i9,"]=",3e15.6)')nam,i,jm,ene,
      .                DREAL(mat(i,jm)),DIMAG(mat(i,jm))
           elseif(.true.)then
-            write(*,'("diag",a,"[",i9,",",i9,"]=",3e15.6)')nam,i,jm,ene,
+            write(negf_log_unit,
+     .      '("diag",a,"[",i9,",",i9,"]=",3e15.6)')nam,i,jm,ene,
      .                DREAL(mat(i,jm)),DIMAG(mat(i,jm))
           endif
         enddo
@@ -514,6 +523,7 @@
 
 
       subroutine writeindex(nau,nuo,iaorb,iphorb,isa)
+      use mNegfOutput, only: negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -532,7 +542,7 @@
       do iuo = 1, nuo
              sym_label(iuo)=symfio(isa(iaorb(iuo)), iphorb(iuo))
              atm_label(iuo)=labelfis(isa(iaorb(iuo)))
-             write(*,*)"label:",iuo,atm_label(iuo),
+             write(negf_log_unit,*)"label:",iuo,atm_label(iuo),
      .          iaorb(iuo),sym_label(iuo)
       enddo
 

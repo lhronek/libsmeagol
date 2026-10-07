@@ -25,6 +25,7 @@
 ! FOR INFORMATION OR QUERIES PLEASE CONTACT THE E-MAIL: smeagol@tcd.ie
 !
       subroutine read_ef_bss(ef_bss,nleads,nspin,ef_lead)
+      use mNegfOutput, only: negf_warn
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -61,7 +62,7 @@
 !          write(12347,*) 'initial_ef:  = ',ef_bss
           close(iif,iostat=iostatv) 
           if (iostatv .ne. 0 )
-     .        write(6,'("initial ef: error in close iif")')
+     .        call negf_warn('initial ef: error closing the ef file')
         endif
       endif
 

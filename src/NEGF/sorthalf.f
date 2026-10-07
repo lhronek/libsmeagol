@@ -1,4 +1,5 @@
       SUBROUTINE SSORT (X, Y, N, KFLAG)
+      use mNegfOutput, only: negf_warn
 C***BEGIN PROLOGUE  SSORT
 C***PURPOSE  Sort an array and optionally make the same interchanges in
 C            an auxiliary array.  The array may be sorted in increasing
@@ -66,15 +67,15 @@ C     .. Intrinsic Functions ..
 C***FIRST EXECUTABLE STATEMENT  SSORT
       NN = N
       IF (NN .LT. 1) THEN
-         PRINT *,
-     +      'The number of values to be sorted is not positive.'
+         call negf_warn(
+     +      'SSORT: the number of values to be sorted is not positive')
          RETURN
       ENDIF
 C
       KK = ABS(KFLAG)
       IF (KK.NE.1 .AND. KK.NE.2) THEN
-         PRINT *,
-     +      'The sort control parameter, K, is not 2, 1, -1, or -2.'
+         call negf_warn(
+     +      'SSORT: the sort control parameter K is not 2, 1, -1 or -2')
          RETURN
       ENDIF
 C

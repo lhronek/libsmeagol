@@ -1,5 +1,6 @@
 module negfcoop
 
+ use mNegfOutput, only: negf_abort
 implicit none
 
 type coopcohp
@@ -52,12 +53,7 @@ subroutine read_coop_option(iu)
                read(iu, *) coopinfo%ia1(i), coopinfo%ia2(i)
            enddo
        else
-           write(6,'(a)') 'No bonds defined. Stop!'
-#ifdef MPI
-           call MPI_Abort( MPI_Comm_World, INFO, MPIerror )
-#else
-           stop
-#endif
+           call negf_abort('EM.COOPBonds: no bonds defined', collective=.true.)
        endif ! fdf_block
     endif ! IOnode
 

@@ -36,6 +36,7 @@ module mMPI_NEGF
  use mpi_siesta
 #endif
 
+ use mNegfOutput, only: negf_output_init, negf_output_finalize, negf_abort
  implicit none
  private
 
@@ -91,18 +92,11 @@ contains
   call MPI_COMM_DUP(parent_comm, negfo_comm, MPIerror)
   call MPI_COMM_SIZE(negfo_comm,nnodes_negfo,MPIerror)
   call MPI_COMM_RANK(negfo_comm,mynode_negfo,MPIerror)
-
-
+  call negf_output_init(negfo_comm, mynode_negfo)
   call MPI_Comm_group(negfo_comm,group_world,MPIerror)
-
-
-  if(mod(nnodes_negfo,NParallelK).ne.0)then
-    if(mynode_negfo==0)then
-      write(*,*)"The total number of MPI processes must be an integer multiple of EM.ParallelOverKNum."
-      write(*,*)"Please change either the number of MPI processes or the value of EM.ParallelOverKNum."
-    endif
-    call stopnegf
-  endif
+  if(mod(nnodes_negfo,NParallelK).ne.0) call negf_abort( &
+    "The total number of MPI processes must be an integer multiple of EM.ParallelOverKNum;"// &
+    " change either the number of MPI processes or the value of EM.ParallelOverKNum", collective=.true.)
 
   nprocs_k=nnodes_negfo/NParallelK
 !  write(12347,*)"nprocs_k=",nprocs_k,nnodes_negfo,NParallelK
@@ -193,7 +187,7 @@ contains
   nnodes_negfo=1
   mynode_inverse=0
   nnodes_inverse=1
-!  write(*,*)"nheads=",myhead,nheads
+  call negf_output_init(0, 0)
 #endif
 
  end subroutine create_communicators_negf
@@ -216,6 +210,7 @@ contains
 #endif
 
 
+  call negf_output_finalize()
  end subroutine destroy_communicators_negf
 
 #ifndef MPI

@@ -98,6 +98,7 @@
 !> \todo
 !> \bug
 module mMatrixUtil
+  use mNegfOutput, only: negf_abort
   use mConstants
   use mTypes
   use mUseful
@@ -944,10 +945,7 @@ endif
     call zgetrf(mat%iRows,mat%iRows,mat%a,mat%iRows,ipiv,ierror)
     call system_clock(t2)
 !    write(*,*)"time_inverse_zgetrf=",(1D0 * (t2-t1))/1d4
-    if (ierror /= 0 ) then
-        if (outinfo) write(12347,'(a,a,i0)')trim(sMyName),": LU factorization failed with error: ", ierror
-      stop
-    endif
+    if (ierror /= 0 ) call negf_abort(trim(sMyName)//": LU factorization failed", ierror)
     if (io%isDebug) then
       write(io%iout,'(a,i0)')"info=",ierror
     endif
@@ -960,10 +958,7 @@ endif
     call zgetri(mat%iRows,mat%a,mat%iRows,ipiv,work,lwork,ierror)
     call system_clock(t2)
 !    write(*,*)"time_inverse_zgetri=",(1D0 * (t2-t1))/1d4
-    if (ierror /= 0 ) then
-      write(io%iout,'(a,a,i0)')trim(sMyName),": Inversion failed with error: ", ierror
-      stop
-    endif
+    if (ierror /= 0 ) call negf_abort(trim(sMyName)//": inversion failed", ierror)
     if (io%isDebug) then
       write(io%iout,'(a,i0)')"info=",ierror
     endif
@@ -1038,8 +1033,7 @@ endif
     if ((a%iCols == b%iRows) .and. (c%iRows == a%iRows) .and. (c%iCols == b%iCols)) then
       call zgemm(kn, kn, a%iRows, b%iCols, a%iCols, alpha, a%a, a%iRows, b%a, b%iRows, kczero, c%a, c%iRows)
     else
-      write(io%iout,'(a)')"The dimensions of matrices prevent multiplication. Please check them."
-      stop
+      call negf_abort("the dimensions of the matrices prevent multiplication")
     endif
   end subroutine ProductCeAxBv1
 
@@ -2418,14 +2412,8 @@ endif
     integer ncol(m),w(n),indlistw(n)
 
     if(DiagonalElementsFilled)then
-      if(m>nnz)then
-        write(*,*)"not enough non-zero elements for a matrix with all diagonal elements non-zero."
-        stop
-      endif
-      if(m .ne. n)then
-        write(*,*)"n needs to be equal to m for a matrix with all diagonal elements non-zero."
-        stop
-      endif
+      if(m>nnz) call negf_abort("not enough non-zero elements for a matrix with all diagonal elements non-zero")
+      if(m .ne. n) call negf_abort("n needs to be equal to m for a matrix with all diagonal elements non-zero")
 
       ncol=1
       k=m

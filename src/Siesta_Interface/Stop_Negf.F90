@@ -26,51 +26,25 @@
 ! FOR INFORMATION OR QUERIES PLEASE CONTACT THE E-MAIL: smeagol@tcd.ie
 !
   subroutine stopnegf
-
-  use mMPI_NEGF
-  use negfmod, only : outinfo
-  integer MPIerror
- 
-  if (outinfo) write(12347,*)"exiting"
+  use mNegfOutput, only: negf_output_finalize, negf_out_unit
 #ifdef MPI
-!        call MPI_Barrier(MPI_Comm_World,MPIerror)
+  use mpi_siesta
+#endif
+  integer MPIerror
+  flush(negf_out_unit())
+  call negf_output_finalize()
+#ifdef MPI
   call MPI_Finalize( MPIerror )
 #endif
   stop
-
   end subroutine stopnegf
 
 
   SUBROUTINE stop_not_implemented(message)
-
-
-#ifdef MPI
-  use mpi_siesta
-#endif
+  use mNegfOutput, only: negf_abort
   IMPLICIT NONE
   CHARACTER(LEN=*) :: message
-  integer mynode
-#ifdef MPI
-  INTEGER :: MPIerror
-#endif
- 
-#ifdef MPI
-  CALL MPI_COMM_RANK(MPI_COMM_WORLD,mynode,MPIerror)
-#else
-  MyNode=0
-#endif
-
-  if(mynode.eq.0)then
-    write(*,*)message
-    write(*,*)"stopping program"
-  endif
-
-#ifdef MPI
-  call MPI_Barrier(MPI_Comm_World,MPIerror)
-  call MPI_Finalize( MPIerror )
-#endif
-  stop
-
+  call negf_abort(trim(message)//": not implemented", collective=.true.)
   END SUBROUTINE stop_not_implemented
 
 

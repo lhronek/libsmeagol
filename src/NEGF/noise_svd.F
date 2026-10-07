@@ -114,6 +114,7 @@
 
       subroutine svdmk(
      .    matin,invmat,n,svdtol,noisemax,fmatinv,faddnoise,kappa,s1,sn)
+      use mNegfOutput, only: negf_warn, negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -144,7 +145,7 @@
 
       CALL ZGESVD( 'A', 'A', n, n, matin, n,sv, u, n, vt,n,
      $                   work, nwork * n, rwork, INFO )
-      if(info.ne.0)write(*,*)"infosvd=",info
+      if(info.ne.0) call negf_warn('zgesvd failed', info)
       s1=sv(1)
       sn=sv(n)
       kappa=sv(1)/sv(n)
@@ -236,6 +237,7 @@
 
       subroutine svdmtest(ene,
      .    matin,invmat,n,svdtol,noisemax,fmatinv,faddnoise)
+      use mNegfOutput, only: negf_warn, negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -266,7 +268,7 @@
 
       CALL ZGESVD( 'A', 'A', n, n, matin, n,sv, u, n, vt,n,
      $                   work, nwork * n, rwork, INFO )
-      if(info.ne.0)write(*,*)"infosvd=",info
+      if(info.ne.0) call negf_warn('zgesvd failed', info)
 
       svmax=sv(1)
       m=n
@@ -355,6 +357,7 @@
 
       subroutine svdm(
      .    matin,invmat,n,svdtol,noisemax,fmatinv,faddnoise)
+      use mNegfOutput, only: negf_warn, negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -384,7 +387,7 @@
 
       CALL ZGESVD( 'A', 'A', n, n, matin, n,sv, u, n, vt,n,
      $                   work, nwork * n, rwork, INFO )
-      if(info.ne.0)write(*,*)"infosvd=",info
+      if(info.ne.0) call negf_warn('zgesvd failed', info)
 
       svmax=sv(1)
       m=n
@@ -470,6 +473,7 @@
 
 
       subroutine svdm2(mat,matinv,n,svdtol)
+      use mNegfOutput, only: negf_warn, negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -499,7 +503,7 @@
       k1o=mat
       CALL ZGESVD( 'A', 'A', n, n, k1o, n,sv, u, n, vt,n,
      $                   work, nwork * n, rwork, INFO )
-      write(*,*)"infosvdm2=",INFO
+      if(INFO.ne.0) call negf_warn('zgesvd failed', INFO)
 
        SVDTOLint=svdtol
        InvTolNorm=1D+3
@@ -508,7 +512,7 @@
         Do J=1,n
           If (sv(J) .GT. SVDTolint) then
             if (sv(J).GT. InvTolNorm) then
-              write(*,*)"gtinvtolnorm"
+              write(negf_log_unit,*)"gtinvtolnorm"
               k1o(I,J)=DCONJG(vt(J,I))/InvTolNorm
               matinv(I,J)=u(I,J)*InvTolNorm
             else
@@ -572,6 +576,7 @@
 
 
       subroutine svdm3(mat,matinv,n,svdtol)
+      use mNegfOutput, only: negf_warn, negf_log_unit
 
 ! *****************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -601,7 +606,7 @@
 
       CALL ZGESVD( 'A', 'A', n, n, mat, n,sv, u, n, vt,n,
      $                   work, nwork * n, rwork, INFO )
-      if(info.ne.0)write(*,*)"infosvd=",info
+      if(info.ne.0) call negf_warn('zgesvd failed', info)
 
       svmax=sv(1)
       m=n

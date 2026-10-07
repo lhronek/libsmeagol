@@ -136,6 +136,7 @@
   end SUBROUTINE OPTIONS_NEGFK
   
   SUBROUTINE broadcast_leads(NSPIN,NL,H0_L,S0_L,H1_L,S1_L, NR,H0_R,S0_R,H1_R,S1_R)
+  use mNegfOutput, only: negf_abort
 
 ! ********************************************************************
 ! Subroutine to broadcast the Hamiltonian and Overlap matrix elements
@@ -184,8 +185,7 @@
   CALL MPI_BCAST(S1_R(1,1),NR*NR,DAT_dcomplex,0, negf_comm,MPIerror)
 #endif
 #else
-  write(*,*)"bcast_negf called in serial version, exiting..."
-  stop
+  call negf_abort("bcast_negf called in serial version")
 #endif
 
   end SUBROUTINE broadcast_leads
@@ -194,6 +194,7 @@
 
 
   SUBROUTINE energy_points(integraltype,EnergI,EnergF, V,Nenerg_div,nenerg_div_nodes, EiCompL,EiCompR,CONST,mynode,nnodes)
+  use mNegfOutput, only: negf_abort
 
 ! ********************************************************************
 ! Written by Ivan Rungger, October 2008
@@ -230,13 +231,7 @@
        elseif (integraltype.eq.'gauss-chebyshev') then
         CALL GAUCHEB(EnergI,EnergF,EX,EW,Nenerg_div*Nnodes)
        else
-        write(6,'(a)') "negf : Wrong type of Gaussian integration"
-        write(6,'(a)') "negf : ",integraltype
-#ifdef MPI
-        CALL MPI_Abort(negf_comm, 1, MPIerror)
-#else
-        stop
-#endif
+        call negf_abort("negf: wrong type of Gaussian integration: "//trim(integraltype), collective=.true.)
        endif
 #ifdef MPI
        DO I=1,Nnodes-1

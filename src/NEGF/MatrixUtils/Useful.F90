@@ -37,6 +37,7 @@
 !> \todo
 !> \bug
 module mUseful
+  use mNegfOutput, only: negf_abort
   use mConstants
   implicit none
   private
@@ -52,28 +53,19 @@ module mUseful
    integer, intent(in) :: ierror,iout
    character(len=*), intent(in) :: caller, sfile
 
-   if (ierror/=0) then
-      write(iout,'(a,a,i0)')trim(caller),": Error reading file "//trim(sfile)//" code: ",ierror
-      stop
-    endif
+   if (ierror/=0) call negf_abort(trim(caller)//": error reading file "//trim(sfile), ierror)
 
   end subroutine ErrorRead
 
   subroutine ErrorAllocate(ierror,caller,iout)
     integer, intent(in) :: ierror,iout
     character(len=*), intent(in) :: caller
-    if (ierror /= 0) then
-      write(iout,'(a,i0)')trim(caller)//": Error allocating memory, probably you are out of it, check the error code: ", ierror
-      stop
-    endif
+    if (ierror /= 0) call negf_abort(trim(caller)//": error allocating memory, probably out of memory", ierror)
   end subroutine ErrorAllocate
 
   subroutine ErrorDeallocate(ierror,caller,iout)
     integer, intent(in) :: ierror,iout
     character(len=*), intent(in) :: caller
-    if (ierror /= 0) then
-      write(iout,'(a,i0)')trim(caller)//": Error deallocating memory, check the error code: ", ierror
-      stop
-    endif
+    if (ierror /= 0) call negf_abort(trim(caller)//": error deallocating memory", ierror)
   end subroutine ErrorDeallocate
 end module mUseful
