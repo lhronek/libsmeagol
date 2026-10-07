@@ -42,7 +42,7 @@ MODULE mNegf_Interface
   use mMatrixUtil
   use mONInterface, only: DistributedInversionActive
   use mMPI_NEGF
-  use mNegfOutput, only : negf_abort
+  use mNegfOutput, only : negf_abort, negf_out_unit
   use set_rhobd
   use mCurrDistTotal, only : CurrentDistributionMatrix
 
@@ -541,7 +541,7 @@ endif
 #endif
 
     if (mynode_negfo.eq.0) then
-      write(*,*)nam,qsol
+      write(negf_out_unit(),*)nam,qsol
     endif
   end subroutine output_totalcharge
 

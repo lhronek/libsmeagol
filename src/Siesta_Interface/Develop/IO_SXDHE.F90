@@ -37,6 +37,7 @@ MODULE mIO_sxdhe
   use precision
   use parallel
   use ionew
+  use mNegfOutput, only: negf_out_unit
 #ifdef MPI
   use mpi_siesta
 #endif
@@ -284,7 +285,7 @@ subroutine read_sxdhe( maxnd, nbasis, nspin, numd, listdptr, listd, s, xij,dm,h,
 #endif
   
   if (Node.eq.0) then
-    write(6,'(/,a)') 'iodm: Reading Density Matrix from files', fname
+    write(negf_out_unit(),'(/,a)') 'iodm: Reading Density Matrix from files', fname
     call io_assign(unit1)
     open( unit1, file=fname, form='unformatted', status='unknown' )
     rewind(unit1)

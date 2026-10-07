@@ -687,8 +687,8 @@ module mBoundStates
 #else
     MyNode=0
 #endif
-    write(*,*)"in getenebs",ik
-    write(*,*)"grebs1=",ebs(1),ebs(1)
+    write(negf_log_unit,*)"in getenebs",ik
+    write(negf_log_unit,*)"grebs1=",ebs(1),ebs(1)
     write(negf_log_unit,*)"grebs2=",ebs(2),ebs(2)
 
 
@@ -992,7 +992,7 @@ module mBoundStates
       allocate(nbspnode(Nnodes,NSPIN,nk))
 !        rhobstot=0D0
 
-      write(*,*)"in getbsmo", MyNode,ik
+      write(negf_log_unit,*)"in getbsmo", MyNode,ik
         IF (MyNode.EQ.0) THEN
           eienea(1:indemax,1:N1,1:NSPIN)= eiene(1:indemax,1:N1,1:NSPIN)
 #ifdef MPI
@@ -1175,13 +1175,13 @@ module mBoundStates
 
         do ino=1,Nnodes
           if(nspin.eq.2)then
-            write(*,*)"nno=",MyNode,"sep:",ino,nbspnode(ino,1,ik), nbspnode(ino,2,ik)
+            write(negf_log_unit,*)"nno=",MyNode,"sep:",ino,nbspnode(ino,1,ik), nbspnode(ino,2,ik)
           else
-            write(*,*)"nno=",MyNode,"sep:",ino,nbspnode(ino,1,ik)
+            write(negf_log_unit,*)"nno=",MyNode,"sep:",ino,nbspnode(ino,1,ik)
           endif
           do ispin=1,NSPIN
             do j=1,nbspnode(ino,ISPIN,ik)
-              write(*,*) "nebssapaar:=",mynode,ino, ebssaveno(ino,j,:,ISPIN,ik),ISPIN,ik
+              write(negf_log_unit,*) "nebssapaar:=",mynode,ino, ebssaveno(ino,j,:,ISPIN,ik),ISPIN,ik
               
             enddo
           enddo
@@ -1189,11 +1189,11 @@ module mBoundStates
         iebsn(:,ik)=nbspnode(MyNode+1,:,ik)
         ebssaven(:,:,:,ik)=ebssaveno(MyNode+1,:,:,:,ik)
 
-        write(*,*)"iebsn=",MyNode,iebsn(:,ik)
+        write(negf_log_unit,*)"iebsn=",MyNode,iebsn(:,ik)
 
         do ispin=1,NSPIN
           do j=1,iebsn(ISPIN,ik)
-            write(*,*) "nbsinfop:=",MyNode, ebssaven(j,:,ISPIN,ik),ISPIN,ik
+            write(negf_log_unit,*) "nbsinfop:=",MyNode, ebssaven(j,:,ISPIN,ik),ISPIN,ik
           enddo
         enddo
 
@@ -1395,7 +1395,7 @@ module mBoundStates
 #else
     MyNode=0
 #endif
-    write(*,*)"in getrhobs",ik
+    write(negf_log_unit,*)"in getrhobs",ik
 
     if (outinfo) write(12347,*)" Number of k-points =        1 Number of Spins =        1 Number of basis orbs =",     n1
 

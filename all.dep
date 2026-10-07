@@ -182,8 +182,8 @@ scissor.o : scissor.F90 mtypes.mod
 fdf.mod : fdf.f fdf.o 
 fdf.o : fdf.f 
 
-mio_sxdhe.mod : IO_SXDHE.F90 IO_SXDHE.o mtypes.mod parallel.mod ionew.mod mmatrixutil.mod mpi_siesta.mod precision.mod mmpi_negf.mod
-IO_SXDHE.o : IO_SXDHE.F90 mtypes.mod parallel.mod ionew.mod mmatrixutil.mod mpi_siesta.mod precision.mod mmpi_negf.mod
+mio_sxdhe.mod : IO_SXDHE.F90 IO_SXDHE.o mtypes.mod parallel.mod ionew.mod mmatrixutil.mod mpi_siesta.mod precision.mod mmpi_negf.mod mnegfoutput.mod
+IO_SXDHE.o : IO_SXDHE.F90 mtypes.mod parallel.mod ionew.mod mmatrixutil.mod mpi_siesta.mod precision.mod mmpi_negf.mod mnegfoutput.mod
 
 Stop_Negf.o : Stop_Negf.F90 mpi_siesta.mod mnegfoutput.mod
 

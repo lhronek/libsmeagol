@@ -48,7 +48,7 @@
      .    nbss, bssc, inversion_solver, nprocs_hs, geterrsigma,
      .    bseskip, bs_method
       use mTypes
-      use mNegfOutput, only: negf_log_flush
+      use mNegfOutput, only: negf_log_flush, negf_log_unit
       use mMatrixUtil
       use mONInterface
       use mBoundstates
@@ -206,7 +206,8 @@
           if(bsskip.gt.1)then
             IF ((MOD(itermod-1,bsskip) .EQ. 0) .AND. (ik .EQ. 1))
      .        then
-              if(myhead.eq.0) write(*,*)"setting rhobstot=",itermod
+              if(myhead.eq.0) write(negf_log_unit,*)"setting rhobstot=",
+     &            itermod
               if(.not.ALLOCATED(rhobstot))
      &            ALLOCATE(rhobstot(N1,N1,NspinComplexMatrix,nk))
               rhobstot=0D0

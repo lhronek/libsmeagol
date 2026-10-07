@@ -86,7 +86,7 @@
       use sigma, only: sigma_method
       use negfmod
       use mTypes
-      use mNegfOutput, only: negf_log_flush
+      use mNegfOutput, only: negf_log_flush, negf_warn
       use mMatrixUtil
       use mONInterface
       use mSigmaMethod1
@@ -209,6 +209,7 @@
       logical frstme  !!
       save frstme     !!
       data frstme /.true./ !! Meilin Bai
+      logical, save :: coop_orderN_warned = .false.
 
 !      CALL TIMER('TRANSI',1)
 !      CALL TIMER('TRANA1',1)
@@ -1057,8 +1058,10 @@
             allocate(Gamma2_aux(nr,nl))
 !coop
             if (coopinfo%ccoop) then
-               if (negfon .and. myhead .eq. 0) then
-                  write(6,'(a)') 'Warning: EM.OrderN for COOP/COHP not implemented yet!'
+               if (negfon) then
+                  if (myhead .eq. 0 .and. .not. coop_orderN_warned) &
+                    call negf_warn('EM.OrderN for COOP/COHP not implemented yet; COOP/COHP skipped')
+                  coop_orderN_warned = .true.
                else
                   call calc_coop(N1, NL, NR, N1Half, NLHalf, NRHalf, NspinBlocks, NspinComplexMatrix, wk, GammaL, GammaR, gfgeneral, hgeneral,sgeneral, coopinfo%nbond, &
                                  coop1(i,ispin,:),coop2(i,ispin,:),cohp1(i,ispin,:),cohp2(i,ispin,:))

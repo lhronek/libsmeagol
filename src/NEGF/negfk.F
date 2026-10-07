@@ -64,7 +64,8 @@
       use negfmod
       use mONInterface, only: DistributedInversionActive
       use mTypes
-      use mNegfOutput, only: negf_log_flush
+      use mNegfOutput, only: negf_log_flush, negf_log_unit,
+     .    negf_master, negf_out_unit
       use mMatrixUtil
       use mBoundstates
       use mMPI_NEGF
@@ -234,7 +235,7 @@
 !----------------------------------------------------
 
       if(WriteNk.and.iv.eq.0.and.Mynode.eq.0)
-     .    write(*,*)"i_kp=",ik,mynode_groupK
+     .    write(negf_log_unit,*)"i_kp=",ik,mynode_groupK
      
 !  ****** Allocation of Memory for the electrodes*******************
       If ((ITER .EQ. 1) .AND. (istep .EQ. inicoor) .AND. (ik .EQ. 1)
@@ -261,8 +262,8 @@
      .      H0_L2, H1_L2, S0_L2, S1_L2, H0_R2, H1_R2, S0_R2, S1_R2)
 
         if (ABS(Ef_LeadL-Ef_LeadR).GT.1.0d-5) then
-          if (iv.eq.0.and.Mynode.eq.0.and.ITER.EQ.1.and.ik.eq.1)
-     .         write(6,'(a63)')
+          if (iv.eq.0.and.negf_master().and.ITER.EQ.1.and.ik.eq.1)
+     .         write(negf_out_unit(),'(a63)')
      .        'smeagol: different Fermi energies for left and right elec
      .trodes'
           different_eflr=.true.
