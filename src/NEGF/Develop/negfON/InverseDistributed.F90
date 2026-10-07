@@ -28,6 +28,7 @@ module mInverseDistributed
   public :: InvertSparseONDistributed
   public :: DistributedInversionActive
   public :: DistributedEntryOwnerMask
+  public :: DistributedLocalRowRange
   public :: ReduceEnergySliceToMaster
 
   integer, parameter :: tag_blocks = 3101
@@ -462,6 +463,24 @@ contains
       enddo
     enddo
   end subroutine DistributedEntryOwnerMask
+
+  !> rows whose lead-column entries the local mode fills on this rank: its own chunk and the first block
+  !> of the next chunk (r0 > r1 for a rank without a chunk); valid after an inversion of a replicated matrix
+  subroutine DistributedLocalRowRange(r0,r1)
+    integer, intent(out) :: r0,r1
+    integer :: a,b,last
+
+    r0=1
+    r1=0
+    if(c_nblk<=0) return
+    a=c_ca(mynode_inverse)
+    b=c_cb(mynode_inverse)
+    if(a>b) return
+    last=b
+    if(b<c_nblk) last=b+1
+    r0=c_off(a)
+    r1=c_off(last)+c_nb(last)-1
+  end subroutine DistributedLocalRowRange
 
   !> sums buf(ispin,ie,:) over inverse_comm onto the master (the other ranks keep their partial slice)
   subroutine ReduceEnergySliceToMaster(buf,nspin,ne,nnz,ispin,ie)

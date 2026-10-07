@@ -114,7 +114,7 @@
       integer  nnzrow(n1),nnz
       logical distl,distlocal
       logical, allocatable :: emask(:)
-      integer nnzr
+      integer nnzr,ir0,ir1
       double complex gfadd
       integer*4:: sc_0,sc_1,sc_r,sc_m,scb_0,scb_1
       integer*4:: sca_0,sca_1
@@ -667,8 +667,16 @@
 
 
 
+            if(distlocal)then
+              call DistributedLocalRowRange(ir0,ir1)
+              GF_iter2l=0.0D0
+              if(ir1.ge.ir0) CALL ZGEMM('N','N',ir1-ir0+1,NL,NL,
+     &            (1.D0,0.D0),GF_iter1l(ir0,1),N1,gammal,NL,
+     &            (0.D0,0.D0),GF_iter2l(ir0,1),N1)
+            else
             CALL ZGEMM('N','N',N1,NL,NL,(1.D0,0.D0),GF_iter1l,N1,
      &          gammal,NL,(0.D0,0.D0),GF_iter2l,N1)
+            endif
             
 
 
@@ -833,8 +841,16 @@
 
 
 
+            if(distlocal)then
+              call DistributedLocalRowRange(ir0,ir1)
+              GF_iter2r=0.0D0
+              if(ir1.ge.ir0) CALL ZGEMM('N','N',ir1-ir0+1,NR,NR,
+     &            (1.D0,0.D0),GF_iter1r(ir0,1),N1,gammar,NR,
+     &            (0.D0,0.D0),GF_iter2r(ir0,1),N1)
+            else
             CALL ZGEMM('N','N',N1,NR,NR,(1.D0,0.D0),GF_iter1r,N1,
      &          gammar,NR,(0.D0,0.D0),GF_iter2r,N1)
+            endif
  
 
             if(emtimings)then

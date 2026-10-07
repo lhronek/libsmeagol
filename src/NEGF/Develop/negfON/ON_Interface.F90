@@ -49,6 +49,7 @@ module mONInterface
   public :: InvertONGeneral2
   public :: DistributedInversionActive
   public :: DistributedEntryOwnerMask
+  public :: DistributedLocalRowRange
   public :: ReduceEnergySliceToMaster
   public :: OrderNDenseFillThreshold
 
