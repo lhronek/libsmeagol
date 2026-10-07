@@ -98,12 +98,13 @@ module mEnergyGrid
 
     use negfmod
     use mMPI_NEGF
-    use mNegfOutput, only: negf_abort
+    use mNegfOutput, only: negf_master, negf_out_unit
     
     character(LEN=*), intent(in) ::  label
     logical, intent(in) :: sigmatodiski
     integer, intent(in) ::  iter,node,nnodes,n1,nspin,ik,nk,istep,nEneRealBase,nleadslr,leadsdim(nleadslr),storesigmai, inicoor
-    real(kdp), intent(in) ::  ef_lead,v,Temp,Delta,vinitial,vfinal,LeadsVoltageShift(nleadslr)
+    real(kdp), intent(in) ::  ef_lead,v,Temp,vinitial,vfinal,LeadsVoltageShift(nleadslr)
+    real(kdp), intent(inout) ::  Delta
     type(matrixTypeGeneral), intent(in) :: hgeneral(nspin),sgeneral
     real(kdp) einitial,efinal
 
@@ -150,9 +151,8 @@ module mEnergyGrid
       endif
 
       if(ERealGrid%GridType==1)then
-        if(nnodes_inverse>1) call negf_abort("the adaptive real-axis energy grid (EM.GridMethod Adaptivegrid) is not"// &
-          " supported with EM.NProcessorsInverse > 1", collective=.true.)
-        if(ITER.EQ.1.and.node.eq.0 .and. istep .eq. inicoor )  write(6,'(a)') "energygrid_selfenergies_real : Using adaptive grid"
+        if(ITER.EQ.1.and.negf_master() .and. istep .eq. inicoor ) &
+          write(negf_out_unit(),'(a)') "energygrid_selfenergies_real : Using adaptive grid"
 
         ERealGrid%nk=1
 
@@ -168,7 +168,11 @@ module mEnergyGrid
         allocate(ERealGrid%ig(ERealGrid%nEnergies))
         nene=ERealGrid%nEnergies
         neneglobal=ERealGrid%nEnergiesGlobal
-        call energygrid_adapt2(N1,NSPIN, einitial,efinal,Delta, V,nene,neneglobal, ik,hgeneral,sgeneral,nk,storesigmai,nleadslr,LeadsVoltageShift)
+        ! the refinement runs on the inverse-group masters (they hold the self-energy storage); the other
+        ! ranks of the group receive the refined grid
+        if(mynode_inverse==0) &
+          call energygrid_adapt2(N1,NSPIN, einitial,efinal,Delta, V,nene,neneglobal, ik,hgeneral,sgeneral,nk,storesigmai,nleadslr,LeadsVoltageShift)
+        call broadcast_realgrid_inversegroup(Delta)
 
       else
 
@@ -1157,6 +1161,36 @@ module mEnergyGrid
   end SUBROUTINE all_selfenergies
 
    
+  !> ERealGrid%nEnergies, nEnergiesGlobal, e, w, ig and the refined Delta of the inverse-group master copied
+  !> to the other ranks of the group
+  subroutine broadcast_realgrid_inversegroup(Delta)
+    use mMPI_NEGF
+    real(kdp), intent(inout) :: Delta
+    integer :: n,ng,mpierror
+
+#ifdef MPI
+    if(nnodes_inverse<=1) return
+    n=ERealGrid%nEnergies
+    ng=ERealGrid%nEnergiesGlobal
+    call MPI_Bcast(n,1,MPI_integer,0,inverse_comm,mpierror)
+    call MPI_Bcast(ng,1,MPI_integer,0,inverse_comm,mpierror)
+    call MPI_Bcast(Delta,1,DAT_double,0,inverse_comm,mpierror)
+    if(mynode_inverse/=0)then
+      ERealGrid%nEnergies=n
+      ERealGrid%nEnergiesGlobal=ng
+      if(allocated(ERealGrid%e)) deallocate(ERealGrid%e)
+      if(allocated(ERealGrid%w)) deallocate(ERealGrid%w)
+      if(allocated(ERealGrid%ig)) deallocate(ERealGrid%ig)
+      allocate(ERealGrid%e(n),ERealGrid%w(n),ERealGrid%ig(n))
+    endif
+    if(n>0)then
+      call MPI_Bcast(ERealGrid%e(1),n,DAT_dcomplex,0,inverse_comm,mpierror)
+      call MPI_Bcast(ERealGrid%w(1),n,DAT_dcomplex,0,inverse_comm,mpierror)
+      call MPI_Bcast(ERealGrid%ig(1),n,MPI_integer,0,inverse_comm,mpierror)
+    endif
+#endif
+  end subroutine broadcast_realgrid_inversegroup
+
   subroutine energygrid_adapt2(N1,NSPIN, energi,energf,Delta, V,Nenerg_div,Nenerg_div_nodes, ik,hgeneral,sgeneral,nk,storesigmai,nleadslr,LeadsVoltageShift)
 
 
@@ -1175,6 +1209,7 @@ module mEnergyGrid
       use negfmod
       use global_meshvar
       use mTypes
+      use mNegfOutput, only: negf_master, negf_out_unit
            
       implicit none 
       
@@ -1268,7 +1303,7 @@ module mEnergyGrid
       else
         Delta=deltamin
       endif
-      if(myhead .eq. 0) write(6,*) "adaptive:  Final parameters", " ik=",ik,Nenerg_div_nodes,Nenerg_div,deltaout,delta,ERealGrid%nEnergies,ERealGrid%nEnergiesGlobal
+      if(negf_master()) write(negf_out_unit(),*) "adaptive:  Final parameters", " ik=",ik,Nenerg_div_nodes,Nenerg_div,deltaout,delta,ERealGrid%nEnergies,ERealGrid%nEnergiesGlobal
 
       call calculate_weights(Nenerg_div_nodes,  maxsize,Energyranges)     
 
@@ -1300,7 +1335,8 @@ module mEnergyGrid
 
       use sigma
       use global_meshvar
-      use negfmod,only:ikpmod,deltamin,em_iscf,negfon,maxdepth, ndivisions,inversion_solver
+      use negfmod,only:ikpmod,deltamin,em_iscf,negfon,maxdepth, ndivisions,inversion_solver,outinfo
+      use mNegfOutput, only: negf_log_unit
       use mTypes
       use mMatrixUtil
       use mONInterface
@@ -1368,7 +1404,7 @@ module mEnergyGrid
 
       NENERG_LOC=Nenerg_div_end-Nenerg_div_start+1
 
-      if(myhead .eq. 0) write(*,*)"adaptive:",delta,de,idepth,maxdepth, Nenerg_div_start,Nenerg_div_end, Nenerg_div_end-Nenerg_div_start
+      if(myhead .eq. 0) write(negf_log_unit,*)"adaptive:",delta,de,idepth,maxdepth, Nenerg_div_start,Nenerg_div_end, Nenerg_div_end-Nenerg_div_start
 
 !      write(*,*)"getting self-energies"
       call all_selfenergies(1,Nenerg_div_start,Nenerg_div_end,1,ERealGrid%nspin,ERealGrid,0)
@@ -1440,13 +1476,15 @@ module mEnergyGrid
             call AllocateMatrixGeneral(n1,nl+nr,n1*(nl+nr),0,gfout, "recursive_energygrid", io)
 
 !            call invertdiagonalandcolumnsONGeneral(N1,gfmat,nl,nr,gfout)
-            call InvertONGeneral(N1,gfmat,nl,nr,gfout,3,inversion_solver)
+            ! the refinement runs on the group masters alone, so the collective distributed inverter (solver 2)
+            ! is replaced by the serial one here
+            call InvertONGeneral(N1,gfmat,nl,nr,gfout,3,min(inversion_solver,1))
             gf_iter1l=gfout%matdense%a(:,1:nl)
             gf_iter1r=gfout%matdense%a(:,nl+1:nl+nr)
 
             call DestroyMatrixGeneral(gfout,"adaptivegrid",io)
 
-            write(*,*)"done invertingon",i,myhead
+            if(outinfo) write(negf_log_unit,*)"done invertingon",i,myhead
 
           endif
 
