@@ -187,8 +187,8 @@ Stop_Negf.o : Stop_Negf.F90 mpi_siesta.mod mnegfoutput.mod
 
 emtg.o : emtg.F mtypes.mod set_rhobd.mod mmatrixutil.mod sys.mod precision.mod mmpi_negf.mod scissoroperator.mod mcurrdisttotal.mod negfmod.mod mnegf_interface.mod
 
-mnegf_interface.mod : Negf_Interface.F90 Negf_Interface.o mtypes.mod set_rhobd.mod mio_sxdhe.mod parallel.mod mmatrixutil.mod mconstants.mod scissoroperator.mod mcurrdisttotal.mod mmpi_negf.mod negfmod.mod
-Negf_Interface.o : Negf_Interface.F90 mtypes.mod set_rhobd.mod mio_sxdhe.mod parallel.mod mmatrixutil.mod mconstants.mod scissoroperator.mod mcurrdisttotal.mod mmpi_negf.mod negfmod.mod
+mnegf_interface.mod : Negf_Interface.F90 Negf_Interface.o mtypes.mod set_rhobd.mod mio_sxdhe.mod parallel.mod mmatrixutil.mod mconstants.mod scissoroperator.mod mcurrdisttotal.mod mmpi_negf.mod negfmod.mod mnegfoutput.mod
+Negf_Interface.o : Negf_Interface.F90 mtypes.mod set_rhobd.mod mio_sxdhe.mod parallel.mod mmatrixutil.mod mconstants.mod scissoroperator.mod mcurrdisttotal.mod mmpi_negf.mod negfmod.mod mnegfoutput.mod
 
 convertmatrix_NEGFSerialK.o : convertmatrix_NEGFSerialK.F90 mtypes.mod negfmod.mod mmatrixutil.mod mmpi_negf.mod
 

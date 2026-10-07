@@ -97,6 +97,10 @@ contains
   if(mod(nnodes_negfo,NParallelK).ne.0) call negf_abort( &
     "The total number of MPI processes must be an integer multiple of EM.ParallelOverKNum;"// &
     " change either the number of MPI processes or the value of EM.ParallelOverKNum", collective=.true.)
+  if(nprocs_inverse.ne.1) call negf_abort( &
+    "EM.NProcessorsInverse > 1 (inversion distributed over several processes) is not functional in this"// &
+    " libsmeagol build; use EM.NProcessorsInverse 1 (parallelism over energy points and k-points is unaffected)", &
+    collective=.true.)
 
   nprocs_k=nnodes_negfo/NParallelK
 !  write(12347,*)"nprocs_k=",nprocs_k,nnodes_negfo,NParallelK

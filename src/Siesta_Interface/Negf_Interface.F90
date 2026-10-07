@@ -41,6 +41,7 @@ MODULE mNegf_Interface
   use negfmod
   use mMatrixUtil
   use mMPI_NEGF
+  use mNegfOutput, only : negf_abort
   use set_rhobd
   use mCurrDistTotal, only : CurrentDistributionMatrix
 
@@ -245,6 +246,9 @@ MODULE mNegf_Interface
     endif
 
 
+    if(nprocs_hs.ne.1) call negf_abort( &
+      "EM.NProcessorsDistributeMatrices > 1 (H and S distributed over processes) is not functional in this"// &
+      " libsmeagol build; use EM.NProcessorsDistributeMatrices 1", collective=.true.)
     if(nprocs_hs.ne.1)then
       call convertmatrixsiestatosmeagolgeneral(H,S,maxnh,numh, listhptr,listh,no_u_node,xij,NspinRealInputMatrix,  NspinComplexMatrix,no_u, nmat, indxuo,no_s,kpoint(:,ik),hgeneralp,sgeneralp,rhogeneralp, ematgeneralp,emforces, maxnelerow,nnodes_inverse,mynode_inverse,3)
       do ispin=1,NspinComplexMatrix
