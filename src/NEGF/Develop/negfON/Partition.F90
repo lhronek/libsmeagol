@@ -65,6 +65,7 @@ module mPartition
   public :: FillBlocksFromMatrix
   public :: FillBlocksFromMatrixSparse
   public :: FillBlocksFromMatrixSparse2Sparse
+  public :: BlockTridiagonalFill
 
   interface PartitionMatrix
     module procedure PartitionAndReadSparseRowStoredASCII, PartitionAndReadSparseRowStoredBinary, &
@@ -1064,6 +1065,45 @@ module mPartition
     call DestroyArray(vertss,sMyName,io)
   end subroutine PartitionAndReadSparseRowStoredBinary
 
+
+!> \brief number of diagonal blocks of the block-tridiagonal partition of a CRS matrix and the
+!> fraction of the block area that its stored entries occupy; allocates no block data
+  subroutine BlockTridiagonalFill(matA,nl,nr,iBlocks,fill,io)
+    character (len=*), parameter :: sMyName = "BlockTridiagonalFill"
+    type(matrixTypeGeneral), intent(in) :: matA
+    integer, intent(in) :: nl,nr
+    integer, intent(out) :: iBlocks
+    real(kdp), intent(out) :: fill
+    type(ioType), intent(inout) :: io
+
+    type(matrixSparseType), allocatable :: h0(:),h1(:),hm1(:)
+    integer, allocatable ::  horzss(:,:), vertss(:,:)
+    integer :: iCols,iRows,i
+    real(kdp) :: area
+
+    iCols=matA%iCols
+    iRows=matA%iRows
+    call AllocateArray(iCols,horzss,sMyName,io)
+    call AllocateArray(iRows,vertss,sMyName,io)
+    call GetHorzss2(matA,horzss,io)
+    call GetVertss2(matA,vertss,io)
+    call CountBlocks(vertss,horzss,iBlocks,iRows,iCols,nl,nr,io)
+    call AllocateArray(iBlocks,h0,sMyName,io)
+    call AllocateArray(iBlocks,h1,sMyName,io)
+    call AllocateArray(iBlocks,hm1,sMyName,io)
+    call PartitionSparse(h0,h1,hm1,horzss,vertss,iRows,iCols,nl,nr,iBlocks,io)
+    area=0.0_kdp
+    do i=1,iBlocks
+      area=area+real(h0(i)%iRows,kdp)*real(h0(i)%iCols,kdp)
+      if(i<iBlocks) area=area+real(h1(i)%iRows,kdp)*real(h1(i)%iCols,kdp)+real(hm1(i)%iRows,kdp)*real(hm1(i)%iCols,kdp)
+    enddo
+    fill=real(matA%matSparse%nnz,kdp)/area
+    call DestroyArray(h0,sMyName,io)
+    call DestroyArray(h1,sMyName,io)
+    call DestroyArray(hm1,sMyName,io)
+    call DestroyArray(horzss,sMyName,io)
+    call DestroyArray(vertss,sMyName,io)
+  end subroutine BlockTridiagonalFill
 
   subroutine PartitionGeneralMatrix(h0,h1,hm1,iBlocks,matA,nl,nr,io)
     character (len=*), parameter :: sMyName = "PartitionGeneralMatrix"

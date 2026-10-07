@@ -72,6 +72,8 @@ module mInverse
   public :: InverseLastColumnBlocksSparse
   public :: InverseFirstColumnBlocksSparse
   public :: Inverse1NBlocksSparse
+  public :: InverseDiagonalOffdiagonalBlocksDense
+  public :: Inverse1NBlocksDense
 !
  contains
 
@@ -662,6 +664,138 @@ module mInverse
   end subroutine InverseDiagonalOffdiagonalBlocksSparse
 
 
+
+!> \brief one step of the backward Gaussian elimination with dense blocks
+  subroutine GaussianBackwardEliminationDenseStep(h0,hm1,h1,sigmaRin,sigmaRout,io)
+    character (len=*), parameter :: sMyName = "GaussianBackwardEliminationDenseStep"
+    type(matrixType), intent(inout) :: h0,hm1,h1
+    type(matrixType), intent(inout) :: sigmaRin
+    type(matrixType), intent(inout) :: sigmaRout
+    type(ioType), intent(inout) :: io
+
+    integer :: m,n
+    type(matrixType) :: m1,m2
+
+    n=h0%iRows
+    m=h1%iRows
+    call AllocateMatrix(n,n,m1,sMyName,io)
+    call AllocateMatrix(m,n,m2,sMyName,io)
+
+    call MatrixAdd(m1,kcone,h0,-kcone,sigmaRin,io)
+    call Inversematrix(m1,io)
+    call ProductCeAxB(m2,kcone,h1,m1,io)
+    call ProductCeAxB(sigmaRout,kcone,m2,hm1,io)
+
+    call DestroyMatrix(m1,sMyName,io)
+    call DestroyMatrix(m2,sMyName,io)
+  end subroutine GaussianBackwardEliminationDenseStep
+
+!> \brief dense-block twin of InverseDiagonalOffdiagonalBlocksSparse: forward sweep, then one backward
+!> sweep that writes the diagonal blocks (and for opindex 1,3,5 the first off-diagonal blocks) of the
+!> inverse into gfsparse on its pattern; g0(1) and g0(iBlocks) stay allocated for the column recursions
+  subroutine InverseDiagonalOffdiagonalBlocksDense(h0,h1,hm1,g0,sigmaL,iBlocks,gfsparse,opindex,io)
+    character (len=*), parameter :: sMyName = "InverseDiagonalOffdiagonalBlocksDense"
+    type(matrixType), intent(inout) :: h0(:),h1(:),hm1(:)
+    type(matrixType), intent(inout) :: g0(:), sigmaL(:)
+    integer, intent(inout) :: iBlocks
+    type(matrixTypeGeneral), intent(inout) :: gfsparse
+    integer, intent(in) :: opindex
+    type(ioType), intent(inout) :: io
+
+    type(matrixType) :: m1,m2
+    integer :: m,n
+    type(matrixType) :: g1,gm1
+    type(matrixType), allocatable :: sigmaR(:)
+    integer :: i
+
+    call GaussianForwardElimination(h0,hm1,h1,sigmaL,iBlocks,io)
+
+    call AllocateArray(iBlocks,sigmaR,sMyName,io)
+    do i=iBlocks,1,-1
+      call AllocateMatrix(h0(i)%iRows,h0(i)%iCols,h0(i)%iHorz,h0(i)%iVert,sigmaR(i),sMyName,io)
+      sigmaR(i)%a = kczero
+      if(i<iBlocks)then
+        call GaussianBackwardEliminationDenseStep(h0(i+1),hm1(i),h1(i),sigmaR(i+1),sigmaR(i),io)
+        call DestroyMatrix(sigmaR(i+1),sMyName,io)
+      endif
+
+      call AllocateMatrix(h0(i)%iRows,h0(i)%iCols,h0(i)%iHorz,h0(i)%iVert,g0(i),sMyName,io)
+      call MatrixAdd(g0(i),kcone,h0(i),-kcone,sigmaL(i),-kcone,sigmaR(i),io)
+      call Inversematrix(g0(i),io)
+      call CopySparseBlocksSingle(gfsparse,g0(i))
+
+      if(i<iBlocks.and.(opindex==1.or.opindex==3.or.opindex==5))then
+        n=h0(i)%iRows
+        m=h0(i+1)%iRows
+        call AllocateMatrix(n,n,m1,sMyName,io)
+        call AllocateMatrix(n,m,m2,sMyName,io)
+        call MatrixAdd(m1,kcone,h0(i),-kcone,sigmaL(i),io)
+        call Inversematrix(m1,io)
+
+        call AllocateMatrix(h1(i)%iRows,h1(i)%iCols,h1(i)%iHorz,h1(i)%iVert,g1,sMyName,io)
+        call ProductCeAxB(m2,kcone,h1(i),g0(i+1),io)
+        call ProductCeAxB(g1,-kcone,m1,m2,io)
+        call CopySparseBlocksSingle(gfsparse,g1)
+        call DestroyMatrix(g1,sMyName,io)
+
+        call DestroyMatrix(m2,sMyName,io)
+        call AllocateMatrix(m,n,m2,sMyName,io)
+        call AllocateMatrix(hm1(i)%iRows,hm1(i)%iCols,hm1(i)%iHorz,hm1(i)%iVert,gm1,sMyName,io)
+        call ProductCeAxB(m2,kcone,g0(i+1),hm1(i),io)
+        call ProductCeAxB(gm1,-kcone,m2,m1,io)
+        call CopySparseBlocksSingle(gfsparse,gm1)
+        call DestroyMatrix(gm1,sMyName,io)
+
+        call DestroyMatrix(m1,sMyName,io)
+        call DestroyMatrix(m2,sMyName,io)
+      endif
+
+      if(i<iBlocks-1)call DestroyMatrix(g0(i+1),sMyName,io)
+    enddo
+
+    call DestroyMatrix(sigmaR(1),sMyName,io)
+    call DestroyArray(sigmaR,sMyName,io)
+  end subroutine InverseDiagonalOffdiagonalBlocksDense
+
+!> \brief dense-block twin of Inverse1NBlocksSparse: the corner block G(N,1) from the first diagonal block a = G(1,1)
+  subroutine Inverse1NBlocksDense(h0,h1,hm1,g1n,a,ml,iBlocks,io)
+    character(len=*), parameter :: sMyName = "Inverse1NBlocksDense"
+    type(matrixType), intent(inout) :: h0(:),h1(:),hm1(:)
+    type(matrixType), intent(inout) :: g1n,ml(:)
+    type(matrixType), intent(inout) :: a
+    type(ioType),intent(inout)  ::  io
+    integer, intent(inout) :: iBlocks
+
+    integer :: i
+    type(matrixType) :: m1,m2
+
+    call AllocateMatrix(h0(iBlocks)%iRows,h0(iBlocks)%iRows,m1,sMyName,io)
+    call CopyMatrix(m1,-kcone,h0(iBlocks))
+    call Inversematrix(m1,io)
+    call ProductCeAxB(ml(iBlocks-1),kcone,m1,hm1(iBlocks-1),io)
+    call DestroyMatrix(m1,sMyName,io)
+    do i=iBlocks-1,2,-1
+      call AllocateMatrix(h0(i)%iRows,h0(i)%iRows,m1,sMyName,io)
+      call ProductCeAxB(m1,kcone,h1(i),ml(i),io)
+      call MatrixAdd(m1,-kcone,h0(i),-kcone,m1,io)
+      call Inversematrix(m1,io)
+      call ProductCeAxB(ml(i-1),kcone,m1,hm1(i-1),io)
+      call DestroyMatrix(m1,sMyName,io)
+    enddo
+
+    call AllocateMatrix(h0(1)%iRows,h0(1)%iCols,h0(1)%iHorz,h0(1)%iVert,m1,sMyName,io)
+    call CopyMatrix(m1,kcone,a)
+    do i=2,iBlocks
+      call AllocateMatrix(h0(i)%iRows,h0(1)%iCols,h0(1)%iHorz,h0(i)%iVert,m2,sMyName,io)
+      call ProductCeAxB(m2,kcone,ml(i-1),m1,io)
+      call DestroyMatrix(m1,sMyName,io)
+      call AllocateMatrix(h0(i)%iRows,h0(1)%iCols,h0(1)%iHorz,h0(i)%iVert,m1,sMyName,io)
+      call CopyMatrix(m1,kcone,m2)
+      call DestroyMatrix(m2,sMyName,io)
+    enddo
+    call CopyMatrix(g1n,kcone,m1)
+    call DestroyMatrix(m1,sMyName,io)
+  end subroutine Inverse1NBlocksDense
 
   subroutine InverseOffDiagonalBlocks (h0,h1,hm1,g0,g1,gm1,sigmaL,iBlocks,io)
     character (len=*), parameter :: sMyName = "InverseOffDiagonalBlocks"

@@ -65,8 +65,8 @@ ON_Boundstates.o : ON_Boundstates.F90 mtypes.mod mconstants.mod negfmod.mod mmat
 
 minversedistributed.mod : InverseDistributed.F90 InverseDistributed.o mtypes.mod mconstants.mod mmatrixutil.mod mpartition.mod mmpi_negf.mod mnegfoutput.mod negfmod.mod
 InverseDistributed.o : InverseDistributed.F90 mtypes.mod mconstants.mod mmatrixutil.mod mpartition.mod mmpi_negf.mod mnegfoutput.mod negfmod.mod
-moninterface.mod : ON_Interface.F90 ON_Interface.o mtypes.mod minverse.mod mmatrixutil.mod mconstants.mod mgutenberg.mod mpartition.mod mmpi_negf.mod negfmod.mod minversedistributed.mod
-ON_Interface.o : ON_Interface.F90 mtypes.mod minverse.mod mmatrixutil.mod mconstants.mod mgutenberg.mod mpartition.mod mmpi_negf.mod negfmod.mod minversedistributed.mod
+moninterface.mod : ON_Interface.F90 ON_Interface.o mtypes.mod minverse.mod mmatrixutil.mod mconstants.mod mgutenberg.mod mpartition.mod mmpi_negf.mod negfmod.mod minversedistributed.mod mnegfoutput.mod
+ON_Interface.o : ON_Interface.F90 mtypes.mod minverse.mod mmatrixutil.mod mconstants.mod mgutenberg.mod mpartition.mod mmpi_negf.mod negfmod.mod minversedistributed.mod mnegfoutput.mod
 
 mpartition.mod : Partition.F90 Partition.o mtypes.mod mmatrixutil.mod museful.mod mconstants.mod mgutenberg.mod mreaddata.mod negfmod.mod mnegfoutput.mod
 Partition.o : Partition.F90 mtypes.mod mmatrixutil.mod museful.mod mconstants.mod mgutenberg.mod mreaddata.mod negfmod.mod mnegfoutput.mod

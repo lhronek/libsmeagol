@@ -40,6 +40,7 @@ module mONInterface
  use mGutenberg
  use mInverse
  use mInverseDistributed
+ use mNegfOutput, only: negf_log_unit
 
  implicit none
  private
@@ -47,6 +48,12 @@ module mONInterface
   public :: InvertONGeneral
   public :: InvertONGeneral2
   public :: DistributedInversionActive
+  public :: OrderNDenseFillThreshold
+
+  !> block-tridiagonal fill (stored entries / block area) from which the default serial inverter uses dense
+  !> block algebra (BLAS) instead of the CCS block loops
+  real(kdp), save :: OrderNDenseFillThreshold = 0.1_kdp
+  logical, save :: first_serial_call = .true.
 
 contains
 
@@ -115,7 +122,9 @@ contains
     type(matrixTypeGeneral), intent(inout) :: gfout
     integer, intent(in) :: N1,nl,nr,opindex,solver
 
-    integer opindexInternal
+    integer opindexInternal,iBlocks
+    real(kdp) :: fill
+    logical :: dense
     type(matrixTypeGeneral) :: gfcols
     type(ioType) :: io
 
@@ -141,8 +150,18 @@ contains
       endif
     elseif(gfmat%mattype == 2)then
       if(solver == 1 .or. solver == 2)then
-! this will be called by main_sparse.F90
-        call InvertSparseONv3(N1,gfmat,nl,nr,gfout,opindexInternal)
+        call BlockTridiagonalFill(gfmat,nl,nr,iBlocks,fill,io)
+        dense=(fill >= OrderNDenseFillThreshold)
+        if(first_serial_call)then
+          write(negf_log_unit,'(a,i0,a,f6.3,a,f6.3,a)') 'order-N inverter: ',iBlocks,' blocks, block fill ',fill, &
+            ' (dense algebra from ',OrderNDenseFillThreshold,'): '//trim(merge('dense BLAS blocks ','CCS sparse blocks ',dense))
+          first_serial_call=.false.
+        endif
+        if(dense)then
+          call InvertSparseONv3Dense(N1,gfmat,nl,nr,gfout,opindexInternal)
+        else
+          call InvertSparseONv3(N1,gfmat,nl,nr,gfout,opindexInternal)
+        endif
       else
 
         if(opindex==4)opindexInternal=2
@@ -158,6 +177,131 @@ contains
       endif
     endif
   end subroutine InvertONGeneral
+
+!> \brief InvertSparseONv3 with dense blocks and BLAS block algebra (same output contract)
+  subroutine InvertSparseONv3Dense(N1,gfsparse,nl,nr,gfout,opindex)
+    character(len=*), parameter :: sMyName="InvertSparseONv3Dense"
+    type(matrixTypeGeneral) :: gfsparse
+    type(matrixTypeGeneral) :: gfout
+    integer, intent(in) :: N1,nl,nr,opindex
+    type(ioType) :: io
+    type(matrixType), allocatable :: h0(:), h1(:), hm1(:)
+    integer :: iBlocks,i
+    type(matrixType), allocatable :: sigmaL(:),gi1(:),gin(:),mm(:)
+    type(matrixType), allocatable ::  g0(:)
+    type(matrixType) :: g1n
+
+    io%isDebug=.false.
+
+    call PartitionMatrix(h0,h1,hm1,iBlocks,gfsparse,nl,nr,io)
+    call FillBlocksFromMatrixSparse(h0,h1,hm1,iBlocks,gfsparse)
+
+    call AllocateArray(iBlocks,sigmaL,sMyName,io)
+    call AllocateArray(iBlocks,g0,sMyName,io)
+    do i=1,iBlocks
+      call AllocateMatrix(h0(i)%iRows,h0(i)%iCols,h0(i)%iHorz,h0(i)%iVert,sigmaL(i),sMyName,io)
+      sigmaL(i)%a = kczero
+    enddo
+
+    call InverseDiagonalOffdiagonalBlocksDense(h0,h1,hm1,g0,sigmaL,iBlocks,gfsparse,opindex,io)
+
+    do i=1,iBlocks
+      call DestroyMatrix(sigmaL(i),sMyName,io)
+    enddo
+    call DestroyArray(sigmaL,sMyName,io)
+
+    if(opindex==2.or.opindex==3)then
+
+      gfout%matdense%a=0.0_kdp
+      call AllocateArray(iBlocks,gin,sMyName,io)
+      call AllocateArray(iBlocks-1,mm,sMyName,io)
+      do i=1,iBlocks
+          call AllocateMatrix(h0(i)%iRows,h0(iBlocks)%iCols,h0(iBlocks)%iHorz,h0(i)%iVert,gin(i),sMyName,io)
+          gin(i)%a = kczero
+          if (i<=iBlocks-1) then
+            call AllocateMatrix(h0(i)%iRows,h0(i+1)%iCols,h0(i)%iHorz,h0(1)%iVert,mm(i),sMyName,io)
+            mm(i)%a = kczero
+          endif
+      enddo
+
+      call InverseLastColumnBlocks(h0,h1,hm1,gin,g0(iBlocks),mm,iBlocks,io)
+
+      do i=1,iBlocks-1
+        call DestroyMatrix(mm(i),sMyName,io)
+      enddo
+      call DestroyArray(mm,sMyName,io)
+
+      call CopyDenseBlocksShift(gfout%matdense%a,n1,nl+nr,gin,iBlocks,0,n1-nr-nl)
+
+      do i=1,iBlocks
+        call DestroyMatrix(gin(i),sMyName,io)
+      enddo
+      call DestroyArray(gin,sMyName,io)
+
+      call AllocateArray(iBlocks,gi1,sMyName,io)
+      call AllocateArray(iBlocks-1,mm,sMyName,io)
+      do i=1,iBlocks
+          call AllocateMatrix(h0(i)%iRows,h0(1)%iCols,h0(1)%iHorz,h0(i)%iVert,gi1(i),sMyName,io)
+          gi1(i)%a = kczero
+          if (i>=2) then
+            call AllocateMatrix(h0(i)%iRows,h0(i-1)%iCols,h0(i)%iHorz,h0(1)%iVert,mm(i-1),sMyName,io)
+            mm(i-1)%a = kczero
+          endif
+      enddo
+
+      call InverseFirstColumnBlocks(h0,h1,hm1,gi1,g0(1),mm,iBlocks,io)
+      call CopyDenseBlocksShift(gfout%matdense%a,n1,nl+nr,gi1,iBlocks,0,0)
+
+      do i=1,iBlocks-1
+        call DestroyMatrix(mm(i),sMyName,io)
+      enddo
+      do i=1,iBlocks
+        call DestroyMatrix(gi1(i),sMyName,io)
+      enddo
+      call DestroyArray(gi1,sMyName,io)
+      call DestroyArray(mm,sMyName,io)
+
+    endif
+
+    call DestroyMatrix(g0(iBlocks),sMyName,io)
+
+    if(opindex==4.or.opindex==5)then
+
+      gfout%matdense%a = kczero
+      call AllocateMatrix(h0(iBlocks)%iRows,h0(1)%iCols,h0(1)%iHorz,h0(iBlocks)%iVert,g1n,sMyName,io)
+      g1n%a = kczero
+      call AllocateArray(iBlocks-1,mm,sMyName,io)
+      do i=2,iBlocks
+        call AllocateMatrix(h0(i)%iRows,h0(i-1)%iCols,h0(i)%iHorz,h0(1)%iVert,mm(i-1),sMyName,io)
+        mm(i-1)%a = kczero
+      enddo
+
+      call Inverse1NBlocksDense(h0,h1,hm1,g1n,g0(1),mm,iBlocks,io)
+      gfout%matdense%a=g1n%a
+
+      call DestroyMatrix(g1n,sMyName,io)
+      do i=1,iBlocks-1
+        call DestroyMatrix(mm(i),sMyName,io)
+      enddo
+      call DestroyArray(mm,sMyName,io)
+
+    endif
+
+    call DestroyMatrix(g0(1),sMyName,io)
+
+    do i=1,iBlocks
+      call DestroyMatrix(h0(i),sMyName,io)
+    enddo
+    do i=1,iBlocks-1
+      call DestroyMatrix(h1(i),sMyName,io)
+      call DestroyMatrix(hm1(i),sMyName,io)
+    enddo
+    call DestroyArray(g0,sMyName,io)
+    call DestroyArray(h0,sMyName,io)
+    call DestroyArray(h1,sMyName,io)
+    call DestroyArray(hm1,sMyName,io)
+
+  end subroutine InvertSparseONv3Dense
 
   subroutine InvertSparseON(N1,gfsparse,nl,nr,gfout,opindex)
     type(matrixTypeGeneral) :: gfsparse
