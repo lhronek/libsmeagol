@@ -186,8 +186,8 @@ contains
       call InverseOffDiagonalBlocks(h0,h1,hm1,g0,g1,gm1,sigmaL,iBlocks,io)
 
       call CopySparseBlocks(gfsparse,g0,iBlocks)
-      call CopySparseBlocks(gfsparse,g1,iBlocks)
-      call CopySparseBlocks(gfsparse,gm1,iBlocks)
+      call CopySparseBlocks(gfsparse,g1,iBlocks-1)
+      call CopySparseBlocks(gfsparse,gm1,iBlocks-1)
 
       do i=1,iBlocks-1
         call DestroyMatrix(g1(i),sMyName,io)
