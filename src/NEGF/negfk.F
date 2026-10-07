@@ -341,7 +341,7 @@
      .      NspinBlocks, NspinComplexMatrix,
      &        V,N1,NL,H0_L2,S0_L2,H1_L2,S1_L2,
      &        NR,H0_R2,S0_R2,H1_R2,S1_R2,hgeneralp,sgeneralp,
-     &        Set_HBoundary_Leads,Set_HLR_Zero)
+     &        Set_HBoundary_Leads,Set_HLR_Zero,HStol)
         sgeneralp%mattype=2
         do ispin=1,NspinComplexMatrix
           hgeneralp(ispin)%mattype=2
