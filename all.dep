@@ -92,7 +92,7 @@ Types.o : Types.F90 mconstants.mod
 museful.mod : Useful.F90 Useful.o mconstants.mod mnegfoutput.mod
 Useful.o : Useful.F90 mconstants.mod mnegfoutput.mod
 
-PDOS.o : PDOS.F90 mtypes.mod mconstants.mod mmatrixutil.mod
+PDOS.o : PDOS.F90 mtypes.mod mconstants.mod mmatrixutil.mod mnegfoutput.mod
 
 RhoSingleLead.o : RhoSingleLead.F90 mtypes.mod mmatrixutil.mod mmpi_negf.mod negfmod.mod moninterface.mod
 

@@ -649,30 +649,71 @@ end SUBROUTINE set_gf_0
 
 
 
-SUBROUTINE em_dos_SingleLead_general(n,nuo,NSpinBlocks,NspinComplexMatrix,empdos, emdostotk,empdostotk,sgeneral,rhogeneral)
+SUBROUTINE em_dos_SingleLead_general(n,nuo,NSpinBlocks,NspinComplexMatrix,ispin,weight,empdos, emdostotk,empdostotk,sgeneral,rhogeneral)
+! lead-projected DOS from the single-lead density of the current energy point;
+! collinear blocks (NSpinBlocks 1, 2) fill block 1 for spin ispin, as em_dos does;
+! the density carries the energy-grid weight of its LDOS integral, divided out here
+! so that the result is a DOS per energy like em_dos
 
   use mTypes
 
   implicit none
 
-  integer, intent(in) :: n,NSpinBlocks,nuo,NspinComplexMatrix
+  integer, intent(in) :: n,NSpinBlocks,nuo,NspinComplexMatrix,ispin
+  double precision, intent(in) :: weight
   logical, intent(in) :: empdos
   type(matrixTypeGeneral), intent(in) :: sgeneral
   type(matrixTypeGeneral), intent(in) :: rhogeneral(NspinComplexMatrix)
   double precision, intent(out) :: emdostotk(NSpinBlocks),empdostotk(nuo,NSpinBlocks)
 
-!  if(NSpinBlocks<=3)then
-!    for collinear spins this still needs to be implemented
   if(NSpinBlocks>3)then
     if(NspinComplexMatrix==4)then
       call GetRhoPDOS_nc_noON(rhogeneral,sgeneral,NspinBlocks,empdos,emdostotk,empdostotk)
     else
       call GetRhoPDOS_nc_ON(rhogeneral(1)%matsparse,sgeneral%matsparse,NspinBlocks,empdos,emdostotk,empdostotk)
     endif
+  else
+    call GetRhoPDOS_collinear(rhogeneral(ispin)%matsparse,sgeneral%matsparse,nuo,empdos,emdostotk(1),empdostotk(1,1))
+  endif
+  if(weight/=0.0D0)then
+    emdostotk=emdostotk/weight
+    if(empdos) empdostotk=empdostotk/weight
   endif
 
-
 end SUBROUTINE em_dos_SingleLead_general
+
+SUBROUTINE GetRhoPDOS_collinear(rhosparse,ssparse,nuo,empdos,emdostot,RhoPDOS)
+! one spin block: Tr[rho S] per orbital and in total, Ry^-1 -> eV^-1 like em_dos
+
+  use mTypes
+  use mConstants
+  use mNegfOutput, only: negf_abort
+
+  implicit none
+
+  type(matrixSparseType), intent(in) :: rhosparse,ssparse
+  integer, intent(in) :: nuo
+  logical, intent(in) :: empdos
+  real(kdp), intent(out) :: emdostot
+  real(kdp), intent(out) :: RhoPDOS(nuo)
+  integer i,ind
+  real(kdp) pd
+
+  if(rhosparse%nnz/=ssparse%nnz.or.rhosparse%irows/=ssparse%irows.or.ssparse%irows/=nuo) &
+    call negf_abort("GetRhoPDOS_collinear: density and overlap sparsity patterns differ")
+  emdostot=0.0_kdp
+  if(empdos) RhoPDOS=0.0_kdp
+  do i=1,nuo
+    pd=0.0_kdp
+    do ind=ssparse%q(i),ssparse%q(i+1)-1
+      pd=pd+dreal(rhosparse%b(ind)*DCONJG(ssparse%b(ind)))
+    enddo
+    if(empdos) RhoPDOS(i)=pd/13.6057D0
+    emdostot=emdostot+pd
+  enddo
+  emdostot=emdostot/13.6057D0
+
+end SUBROUTINE GetRhoPDOS_collinear
 
 
 

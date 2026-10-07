@@ -761,7 +761,7 @@
                 if(mynode_inverse.eq.0.and..not.emldos2.and.GetRhoSingleLead.ne.0)then
 !                  write(12347,*)"setting rho and omega to zero"
                   call SetRhoToZero(NspinComplexMatrix,rhogeneral)
-                  call SetRhoToZero(NspinComplexMatrix,ematgeneral)
+                  if(emforces) call SetRhoToZero(NspinComplexMatrix,ematgeneral)
                 endif
 
                 if(mynode_inverse.eq.0.and.(emldos2.or.GetRhoSingleLead.ne.0))then
@@ -873,7 +873,7 @@
                   call em_dos_general(n1,em_nuo,NspinBlocks,NspinComplexMatrix,gfgeneral,empdos,emdostotk,empdostotk,sgeneral)
                 else
                   if(mynode_inverse.eq.0.and..not.emldos2)then
-                    call em_dos_SingleLead_general(n1,em_nuo,NspinBlocks,NspinComplexMatrix,empdos,emdostotk,empdostotk,sgeneral,rhogeneral)
+                    call em_dos_SingleLead_general(n1,em_nuo,NspinBlocks,NspinComplexMatrix,ispin,dreal(ETransmGrid%w(i)),empdos,emdostotk,empdostotk,sgeneral,rhogeneral)
                   endif
                 endif
 
