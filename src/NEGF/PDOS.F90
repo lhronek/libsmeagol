@@ -102,7 +102,7 @@ SUBROUTINE em_dos_general(n,nuo,NSpinBlocks,NspinComplexMatrix,gf,empdos, emdost
   integer nmat
 
   if(NSpinBlocks<=3)then
-    call em_dos(nuo,gf,empdos,emdostotk,empdostotk,sgeneral)
+    call em_dos(nuo,gf,empdos,emdostotk(1),empdostotk(1,1),sgeneral)
   else
     if(NspinComplexMatrix==4)then
       call em_dos_nc(n,NSpinBlocks,gf,empdos,emdostotk,empdostotk,sgeneral)
