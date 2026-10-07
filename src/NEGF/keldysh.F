@@ -557,8 +557,10 @@
               CALL SYSTEM_CLOCK(scb_0,sc_r,sc_m)
             endif
 
-          else
-            write(12347,*)"not inverting real"
+          elseif(negfon.and..not.(bs_add.and.bs_method.eq.1).and.
+     &        DistributedInversionActive(inversion_solver))then
+            call InvertONGeneral(N1,gfgeneral,nl,nr,gfout,2,
+     &          inversion_solver)
           endif
           if(nprocs_hs.ne.1)
      &      call DestroyMatrixGeneral(gfP,"keldyshreal",io)
@@ -1229,7 +1231,8 @@
             endif
           else
 
-            if(mynode_inverse.eq.0)then
+            if(mynode_inverse.eq.0.or.
+     &          DistributedInversionActive(inversion_solver))then
 !Uncomment the commented out lines below to print out the GF before and
 !after inversion
 !              if(myhead==0) call PrintMatrixCRS(gf%matSparse,"gfinv",io)

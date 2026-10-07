@@ -241,18 +241,16 @@
 
       IF (ik.eq.1) THEN
 
-        if(mynode_inverse.eq.0)then
-          allocate(leadsdim(nleadslr),LeadsVoltageShift(nleadslr))
-          leadsdim(1)=nl
-          leadsdim(2)=nr
-          LeadsVoltageShift(1)=0.5D0 * V
-          LeadsVoltageShift(2)=-0.5D0 * V
+        allocate(leadsdim(nleadslr),LeadsVoltageShift(nleadslr))
+        leadsdim(1)=nl
+        leadsdim(2)=nr
+        LeadsVoltageShift(1)=0.5D0 * V
+        LeadsVoltageShift(2)=-0.5D0 * V
 
-          call energygrid_transm(slabel,nspin,V,T,Ef, &
-          nleadslr,leadsdim,nk, LeadsVoltageShift, &
-          deltaene,deltaenes, deltaenebig)
-          deallocate(leadsdim,LeadsVoltageShift)
-        endif
+        call energygrid_transm(slabel,nspin,V,T,Ef, &
+        nleadslr,leadsdim,nk, LeadsVoltageShift, &
+        deltaene,deltaenes, deltaenebig)
+        deallocate(leadsdim,LeadsVoltageShift)
 
         N1Half=N1/2
         NlHalf=NL/2
@@ -630,15 +628,7 @@
 
               else
 
-                if((emdos).and.(GetRhoSingleLead.ne.0.or.TransmissionMatrix.or.TransmissionRL.or.TransmissionChannels))then
-                  opindex=3
-                elseif(emdos.and.GetRhoSingleLead.eq.0)then
-                  opindex=5
-                elseif(TransmissionMatrix.or.TransmissionRL.or.TransmissionChannels)then
-                  opindex=2
-                else
-                  opindex=4
-                endif
+                opindex=transmission_opindex()
 
                 if((opindex==2).or.(opindex==3))then
                   call AllocateMatrixGeneral(n1,nl+nr,n1*(nl+nr),0,gfout,"transm", io)
@@ -1171,10 +1161,12 @@
               write(12347,'(A,f12.6)') 'multt',(sc_1-sc_0)*1.0d0/sc_r
               CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
             endif
+            elseif(negfon.and..not.skiptransm.and.DistributedInversionActive(inversion_solver))then
+              call InvertONGeneral(N1,gfgeneral,nl,nr,gfout,transmission_opindex(),inversion_solver)
             endif
 
 
-            call deallocate_selfenergies(i,ispin,ik,ETransmGrid)
+            if(mynode_inverse.eq.0) call deallocate_selfenergies(i,ispin,ik,ETransmGrid)
 
 
         ENDDO spinloop
@@ -1621,6 +1613,20 @@
         CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
       endif
       if(allocated(work))deallocate(work,GF_iter_dag)
+
+      contains
+
+        integer function transmission_opindex()
+          if((emdos).and.(GetRhoSingleLead.ne.0.or.TransmissionMatrix.or.TransmissionRL.or.TransmissionChannels))then
+            transmission_opindex=3
+          elseif(emdos.and.GetRhoSingleLead.eq.0)then
+            transmission_opindex=5
+          elseif(TransmissionMatrix.or.TransmissionRL.or.TransmissionChannels)then
+            transmission_opindex=2
+          else
+            transmission_opindex=4
+          endif
+        end function transmission_opindex
 
       END SUBROUTINE transm
 

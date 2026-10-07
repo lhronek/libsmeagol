@@ -39,12 +39,14 @@ module mONInterface
  use mPartition
  use mGutenberg
  use mInverse
+ use mInverseDistributed
 
  implicit none
  private
 
   public :: InvertONGeneral
   public :: InvertONGeneral2
+  public :: DistributedInversionActive
 
 contains
 
@@ -78,7 +80,7 @@ contains
       endif
     elseif(gfmat%mattype == 2)then
     if (outinfo) write(12347,*)"serial inversion"
-      if(solver == 1)then
+      if(solver == 1 .or. solver == 2)then
         call InvertSparseONv3(N1,gfmat,nl,nr,gfout,opindexInternal)
       else
 
@@ -91,7 +93,7 @@ contains
       call CollectMatrixGeneral(gfmat,gfserial,"gfconvert",io)
 
       if(mynode_inverse==0)then
-        if(solver == 1)then
+        if(solver == 1 .or. solver == 2)then
           call InvertSparseONv3(N1,gfserial,nl,nr,gfout,opindexInternal)
         else
 
@@ -113,6 +115,11 @@ contains
 
     integer opindexInternal
 
+    if(DistributedInversionActive(solver))then
+      call InvertSparseONDistributed(N1,gfmat,nl,nr,gfout,opindex)
+      return
+    endif
+
     opindexInternal=opindex
     if(gfmat%mattype == 0)then
 
@@ -126,7 +133,7 @@ contains
         gfout%matdense%a(:,nl+1:nl+nr)=gfmat%matdense%a(:,n1-nr+1:n1)
       endif
     elseif(gfmat%mattype == 2)then
-      if(solver == 1)then
+      if(solver == 1 .or. solver == 2)then
 ! this will be called by main_sparse.F90
         call InvertSparseONv3(N1,gfmat,nl,nr,gfout,opindexInternal)
       else

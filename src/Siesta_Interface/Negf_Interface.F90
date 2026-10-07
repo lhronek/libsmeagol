@@ -297,7 +297,7 @@ MODULE mNegf_Interface
 !!!!      call PrintSparse2DenseReorderedNC(rhogeneralp,no_u, NspinComplexMatrix, NspinBlocks, NspinComplexMatrix,1,"rho_0")
 !!!!    endif
 
-      if(RhoSetZeroIfHZero)then
+      if(RhoSetZeroIfHZero.and.mynode_inverse.eq.0)then
       if(NspinBlocks==4.and.NspinBlocks==NspinComplexMatrix)then
         do ispin=1,NspinComplexMatrix
           do i=1,rhogeneralp(ispin)%Matsparse%iRows
@@ -315,6 +315,13 @@ MODULE mNegf_Interface
           enddo
         enddo
       endif
+    endif
+
+    if(nnodes_inverse>1)then
+      do ispin=1,NspinComplexMatrix
+        call BroadcastMatrixValuesCRS(rhogeneralp(ispin),inverse_comm,0,"negf_interface",iout)
+        if(emforces) call BroadcastMatrixValuesCRS(ematgeneralp(ispin),inverse_comm,0,"negf_interface",iout)
+      enddo
     endif
 
 !!!!    do ispin=1,NspinComplexMatrix
@@ -397,12 +404,10 @@ MODULE mNegf_Interface
 
     if(.false.)call output_totalcharge(S,DM,NspinRealInputMatrix,maxnh,negfo_comm,mynode_negfo,"q_EM1=")
 
-    if(mynode_inverse.eq.0)then
-      do ispin=1,NspinComplexMatrix
-        call DestroyMatrixGeneral(rhogeneralp(ispin),"emtkon",iout)
-        call DestroyMatrixGeneral(ematgeneralp(ispin),  "emtkon",iout)
-      enddo
-    endif
+    do ispin=1,NspinComplexMatrix
+      call DestroyMatrixGeneral(rhogeneralp(ispin),"emtkon",iout)
+      call DestroyMatrixGeneral(ematgeneralp(ispin),  "emtkon",iout)
+    enddo
 
     if(nprocs_hs.ne.1)then
       do ispin=1,NspinComplexMatrix

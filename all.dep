@@ -1,4 +1,4 @@
-$(LIBDIR)/libsmeagol.a : hsleads.o dmbk.o hsl.o hslk.o pasbias.o Interfaces.o mpi.o mpi__include.o setgfelements.o negfk.o mnegfcoop.o keldysh.o rho_boundary.o negfk_subs.o UpdateRho.o SelfEnergies.o BoundStates.o ComputeULR.o CurrentDistribution.o EnergyGrid.o PDOS.o RhoSingleLead.o SetBoundaryElements.o SetBoundaryElements1.o SetBoundaryElements2.o SigmaFourier.o SigmaMethod1.o TransmissionDecomposition.o TransmissionDecompositionRemove.o current.o eigenvalues.o eiofe.o mrgrnk.o negfmod.o noise_svd.o rhoG_reduce.o sigma.o sorthalf.o transm.o writematrix.o writesigmagf.o Constants.o MatrixUtil.o MatrixUtilOMP.o MatrixUtilsSubs.o Types.o Useful.o ZeemanBfield.o loe.o empty_subs.o Gutenberg.o Inverse.o ON_Boundstates.o ON_Interface.o Partition.o ReadData.o gaucheb.o gauleg.o precision.o sys.o atomlist.o ionew.o io.o f77flush.o parallel.o memory.o paste.o atmfuncs.o leqi.o timer.o scissor.o fdf.o IO_SXDHE.o Stop_Negf.o emtg.o Negf_Interface.o convertmatrix_NEGFSerialK.o convertmatrix_NEGFSerial.o convertmatrix_NEGFParallel.o convertmatrix_BaseParallelK.o convertmatrix.o boundary_elements.o RhoPartialKNEGFToRho.o RhoNEGFToRhoImaginary.o RhoNEGFToRho.o RhoNEGFKToRho.o MergeRhoK.o CurrentDistributionMatrix.o XML_EMPDOS.o meshvars.o mpi_negf.o read_efbs.o rotateDM.o negf_output.o
+$(LIBDIR)/libsmeagol.a : hsleads.o dmbk.o hsl.o hslk.o pasbias.o Interfaces.o mpi.o mpi__include.o setgfelements.o negfk.o mnegfcoop.o keldysh.o rho_boundary.o negfk_subs.o UpdateRho.o SelfEnergies.o BoundStates.o ComputeULR.o CurrentDistribution.o EnergyGrid.o PDOS.o RhoSingleLead.o SetBoundaryElements.o SetBoundaryElements1.o SetBoundaryElements2.o SigmaFourier.o SigmaMethod1.o TransmissionDecomposition.o TransmissionDecompositionRemove.o current.o eigenvalues.o eiofe.o mrgrnk.o negfmod.o noise_svd.o rhoG_reduce.o sigma.o sorthalf.o transm.o writematrix.o writesigmagf.o Constants.o MatrixUtil.o MatrixUtilOMP.o MatrixUtilsSubs.o Types.o Useful.o ZeemanBfield.o loe.o empty_subs.o Gutenberg.o Inverse.o ON_Boundstates.o ON_Interface.o Partition.o InverseDistributed.o ReadData.o gaucheb.o gauleg.o precision.o sys.o atomlist.o ionew.o io.o f77flush.o parallel.o memory.o paste.o atmfuncs.o leqi.o timer.o scissor.o fdf.o IO_SXDHE.o Stop_Negf.o emtg.o Negf_Interface.o convertmatrix_NEGFSerialK.o convertmatrix_NEGFSerial.o convertmatrix_NEGFParallel.o convertmatrix_BaseParallelK.o convertmatrix.o boundary_elements.o RhoPartialKNEGFToRho.o RhoNEGFToRhoImaginary.o RhoNEGFToRho.o RhoNEGFKToRho.o MergeRhoK.o CurrentDistributionMatrix.o XML_EMPDOS.o meshvars.o mpi_negf.o read_efbs.o rotateDM.o negf_output.o
 
 hsleads.o : hsleads.F mpi_siesta.mod negfmod.mod scissoroperator.mod mnegfoutput.mod
 
@@ -63,8 +63,10 @@ Inverse.o : Inverse.F90 mtypes.mod mconstants.mod mmatrixutil.mod
 monboundstates.mod : ON_Boundstates.F90 ON_Boundstates.o mtypes.mod mconstants.mod negfmod.mod mmatrixutil.mod
 ON_Boundstates.o : ON_Boundstates.F90 mtypes.mod mconstants.mod negfmod.mod mmatrixutil.mod
 
-moninterface.mod : ON_Interface.F90 ON_Interface.o mtypes.mod minverse.mod mmatrixutil.mod mconstants.mod mgutenberg.mod mpartition.mod mmpi_negf.mod negfmod.mod
-ON_Interface.o : ON_Interface.F90 mtypes.mod minverse.mod mmatrixutil.mod mconstants.mod mgutenberg.mod mpartition.mod mmpi_negf.mod negfmod.mod
+minversedistributed.mod : InverseDistributed.F90 InverseDistributed.o mtypes.mod mconstants.mod mmatrixutil.mod mpartition.mod mmpi_negf.mod mnegfoutput.mod negfmod.mod
+InverseDistributed.o : InverseDistributed.F90 mtypes.mod mconstants.mod mmatrixutil.mod mpartition.mod mmpi_negf.mod mnegfoutput.mod negfmod.mod
+moninterface.mod : ON_Interface.F90 ON_Interface.o mtypes.mod minverse.mod mmatrixutil.mod mconstants.mod mgutenberg.mod mpartition.mod mmpi_negf.mod negfmod.mod minversedistributed.mod
+ON_Interface.o : ON_Interface.F90 mtypes.mod minverse.mod mmatrixutil.mod mconstants.mod mgutenberg.mod mpartition.mod mmpi_negf.mod negfmod.mod minversedistributed.mod
 
 mpartition.mod : Partition.F90 Partition.o mtypes.mod mmatrixutil.mod museful.mod mconstants.mod mgutenberg.mod mreaddata.mod negfmod.mod mnegfoutput.mod
 Partition.o : Partition.F90 mtypes.mod mmatrixutil.mod museful.mod mconstants.mod mgutenberg.mod mreaddata.mod negfmod.mod mnegfoutput.mod
@@ -72,8 +74,8 @@ Partition.o : Partition.F90 mtypes.mod mmatrixutil.mod museful.mod mconstants.mo
 mreaddata.mod : ReadData.F90 ReadData.o mtypes.mod mconstants.mod mmatrixutil.mod museful.mod mnegfoutput.mod
 ReadData.o : ReadData.F90 mtypes.mod mconstants.mod mmatrixutil.mod museful.mod mnegfoutput.mod
 
-menergygrid.mod : EnergyGrid.F90 EnergyGrid.o $(SRCDIR)/NEGF/const2.h mtypes.mod sigma.mod mmatrixutil.mod mconstants.mod mmpi_negf.mod negfmod.mod moninterface.mod mselfenergies.mod global_meshvar.mod
-EnergyGrid.o : EnergyGrid.F90 $(SRCDIR)/NEGF/const2.h mtypes.mod sigma.mod mmatrixutil.mod mconstants.mod mmpi_negf.mod negfmod.mod moninterface.mod mselfenergies.mod global_meshvar.mod
+menergygrid.mod : EnergyGrid.F90 EnergyGrid.o $(SRCDIR)/NEGF/const2.h mtypes.mod sigma.mod mmatrixutil.mod mconstants.mod mmpi_negf.mod negfmod.mod moninterface.mod mselfenergies.mod global_meshvar.mod mnegfoutput.mod
+EnergyGrid.o : EnergyGrid.F90 $(SRCDIR)/NEGF/const2.h mtypes.mod sigma.mod mmatrixutil.mod mconstants.mod mmpi_negf.mod negfmod.mod moninterface.mod mselfenergies.mod global_meshvar.mod mnegfoutput.mod
 
 mconstants.mod : Constants.F90 Constants.o 
 Constants.o : Constants.F90 
@@ -221,8 +223,8 @@ XML_EMPDOS.o : XML_EMPDOS.F90 negfmod.mod atmfuncs.mod
 global_meshvar.mod : meshvars.F meshvars.o 
 meshvars.o : meshvars.F 
 
-mmpi_negf.mod : mpi_negf.F90 mpi_negf.o mpi_siesta.mod mnegfoutput.mod
-mpi_negf.o : mpi_negf.F90 mpi_siesta.mod mnegfoutput.mod
+mmpi_negf.mod : mpi_negf.F90 mpi_negf.o mpi_siesta.mod mnegfoutput.mod negfmod.mod
+mpi_negf.o : mpi_negf.F90 mpi_siesta.mod mnegfoutput.mod negfmod.mod
 
 negf_output.o : negf_output.F90 mpi_siesta.mod
 

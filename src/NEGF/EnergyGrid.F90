@@ -98,6 +98,7 @@ module mEnergyGrid
 
     use negfmod
     use mMPI_NEGF
+    use mNegfOutput, only: negf_abort
     
     character(LEN=*), intent(in) ::  label
     logical, intent(in) :: sigmatodiski
@@ -149,6 +150,8 @@ module mEnergyGrid
       endif
 
       if(ERealGrid%GridType==1)then
+        if(nnodes_inverse>1) call negf_abort("the adaptive real-axis energy grid (EM.GridMethod Adaptivegrid) is not"// &
+          " supported with EM.NProcessorsInverse > 1", collective=.true.)
         if(ITER.EQ.1.and.node.eq.0 .and. istep .eq. inicoor )  write(6,'(a)') "energygrid_selfenergies_real : Using adaptive grid"
 
         ERealGrid%nk=1
@@ -348,6 +351,7 @@ module mEnergyGrid
 
     use mMPI_NEGF
     use negfmod, only: deauto,trcde,trcef,tenergi,tenergf,deltaimag,nenet,storesigma,RytoeV
+    use mNegfOutput, only: negf_master, negf_out_unit
 
     implicit none
 
@@ -394,10 +398,7 @@ module mEnergyGrid
     if(trcde.gt.0D0)then
       ntglobal=INT((EnerFinal-EnerInitial)/trcde)
     endif
-    if(myhead .EQ.0) then
-      write(*,*)"Calculating transmission coefficient"
-!      write(*,*)"eif=",EnerInitial,EnerFinal,trcde,ntglobal,EFermi,T
-    endif
+    if(negf_master()) write(negf_out_unit(),*)"Calculating transmission coefficient"
 
     nt=ntglobal/nheads
     if(nheads*nt < ntglobal)nt=nt+1
@@ -406,6 +407,9 @@ module mEnergyGrid
     ETransmGrid%nEnergies=nt
     ETransmGrid%nEnergiesGlobal=ETransmGrid%nEnergies*nheads
 
+    if(allocated(ETransmGrid%e)) deallocate(ETransmGrid%e)
+    if(allocated(ETransmGrid%w)) deallocate(ETransmGrid%w)
+    if(allocated(ETransmGrid%ig)) deallocate(ETransmGrid%ig)
     allocate(ETransmGrid%e(ETransmGrid%nEnergies))
     allocate(ETransmGrid%w(ETransmGrid%nEnergies))
     allocate(ETransmGrid%ig(ETransmGrid%nEnergies))
@@ -438,6 +442,7 @@ module mEnergyGrid
     ENDIF
 
     if(myhead==0)then
+      if(allocated(ETransmGrid%eGlobal)) deallocate(ETransmGrid%eGlobal)
       allocate(ETransmGrid%eGlobal(ETransmGrid%nEnergiesGlobal))
 
       IF (ETransmGrid%nEnergiesGlobal.EQ.1) THEN

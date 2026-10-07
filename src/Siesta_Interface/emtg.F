@@ -414,6 +414,16 @@ C New density matrix
         CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
       endif
 
+      if(nnodes_inverse.gt.1)then
+        do ispin=1,NspinComplexMatrix
+          call BroadcastMatrixValuesCRS(rhogeneralp(ispin),inverse_comm,
+     .        0,"emtg",iout)
+          if(emforces)
+     .        call BroadcastMatrixValuesCRS(ematgeneralp(ispin),
+     .        inverse_comm,0,"emtg",iout)
+        enddo
+      endif
+
       call rhonegf_to_rhosiesta(maxnelerow,NspinRealInputMatrix,
      .    NspinComplexMatrix,rhogeneralp,Dnew,
      .    maxnh,no,nuo,nuotot,nmat, listh, numh, listhptr,indxuo,
@@ -449,12 +459,10 @@ C New density matrix
       endif
 
 
-      if(mynode_inverse.eq.0)then
-        do ispin=1,NspinComplexMatrix
-          call DestroyMatrixGeneral(rhogeneralp(ispin),"emtg",iout)
-          call DestroyMatrixGeneral(ematgeneralp(ispin),"emtg",iout)
-        enddo
-      endif
+      do ispin=1,NspinComplexMatrix
+        call DestroyMatrixGeneral(rhogeneralp(ispin),"emtg",iout)
+        call DestroyMatrixGeneral(ematgeneralp(ispin),"emtg",iout)
+      enddo
 
       if(curr_dist)then
         call CurrentDistributionMatrix(DMImag,OmegaImag,H,S,maxnh,numh,

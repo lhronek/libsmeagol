@@ -711,6 +711,7 @@
           CALL SYSTEM_CLOCK(sc_0b,sc_rb,sc_mb)
         endif
 
+      if(mynode_inverse.eq.0)then
 ! Collect real and imaginary components across all MPI ranks
       if(emforces)then
         call rhoG_reduce(N1,NL,NR,NspinBlocks,NspinComplexMatrix,
@@ -764,6 +765,7 @@
 
            enddo ! do ii=1,rhogeneralp(ispin)%matSparse%nnz
         enddo ! do ispin=1,NspinComplexMatrix
+      endif ! if(mynode_inverse.eq.0)then
 
 #ifdef MPI
          CALL MPI_BARRIER(negf_comm, MPIerror )

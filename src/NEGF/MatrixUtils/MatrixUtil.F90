@@ -114,6 +114,8 @@ module mMatrixUtil
   public :: PrintMatrixCRS
   public :: PrintMatrixCRS3VectorsDouble
   public :: CollectMatrixGeneral
+  public :: ReplicateMatrixCRS
+  public :: BroadcastMatrixValuesCRS
   public :: BlockMatToFullMat
   public :: RandomSparseMatrix
   public :: AllocateMatrix
@@ -1356,6 +1358,46 @@ endif
 
   end subroutine PrintMatrixGeneral
 
+
+!> \brief replicates the CRS matrix of rank iroot (pattern and values) on every other rank of comm, which allocates it
+!> \remarks collective over comm
+  subroutine ReplicateMatrixCRS(matg,rows,cols,comm,iroot,mynode,substr,io)
+    use mMPI_NEGF
+    character (len=*), parameter :: sMyName = "ReplicateMatrixCRS"
+    type(matrixTypeGeneral), intent(inout):: matg
+    integer, intent(in) :: rows,cols,comm,iroot,mynode
+    character(len=*), intent(in) :: substr
+    type(ioType), intent(inout) :: io
+    integer :: nnz,MPIerror
+
+#ifdef MPI
+    nnz=0
+    if(mynode==iroot) nnz=matg%matSparse%nnz
+    call MPI_Bcast(nnz,1,MPI_integer,iroot,comm,MPIerror)
+    if(mynode/=iroot) call AllocateMatrixGeneral(rows,cols,nnz,2,matg,substr,io)
+    call MPI_Bcast(matg%matSparse%q(1),rows+1,MPI_integer,iroot,comm,MPIerror)
+    if(nnz>0)then
+      call MPI_Bcast(matg%matSparse%j(1),nnz,MPI_integer,iroot,comm,MPIerror)
+      call MPI_Bcast(matg%matSparse%b(1),nnz,DAT_dcomplex,iroot,comm,MPIerror)
+    endif
+#endif
+  end subroutine ReplicateMatrixCRS
+
+!> \brief broadcasts the stored values of a CRS matrix from rank iroot; every rank must hold the same pattern
+!> \remarks collective over comm
+  subroutine BroadcastMatrixValuesCRS(matg,comm,iroot,substr,io)
+    use mMPI_NEGF
+    character (len=*), parameter :: sMyName = "BroadcastMatrixValuesCRS"
+    type(matrixTypeGeneral), intent(inout):: matg
+    integer, intent(in) :: comm,iroot
+    character(len=*), intent(in) :: substr
+    type(ioType), intent(inout) :: io
+    integer :: MPIerror
+
+#ifdef MPI
+    if(matg%matSparse%nnz>0) call MPI_Bcast(matg%matSparse%b(1),matg%matSparse%nnz,DAT_dcomplex,iroot,comm,MPIerror)
+#endif
+  end subroutine BroadcastMatrixValuesCRS
 
   subroutine AllocateMatrixGeneralParallel(mpi_group,mpi_comm,nProcs,iProc,rowsGlobal,colsGlobal,rows,cols,ihorz,ivert,nnz,mtype,matg,substr,io)
     character (len=*), parameter :: sMyName = "AllocateMatrixGeneralParallel"

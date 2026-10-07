@@ -509,6 +509,17 @@ subroutine convertmatrixsiestatosmeagolparallel_2k(sgeneralp,H,S,maxnh,numh,list
 
   endif
 
+  if(nnodes_inverse > 1)then
+    do ispin=1,NspinComplexMatrix
+      call ReplicateMatrixCRS(rhogeneral(ispin),nmat,nmat,inverse_comm,0,mynode_inverse,"convertmatrix",iout)
+    enddo
+    if(emforces)then
+      do ispin=1,NspinComplexMatrix
+        call ReplicateMatrixCRS(ematgeneral(ispin),nmat,nmat,inverse_comm,0,mynode_inverse,"convertmatrix",iout)
+      enddo
+    endif
+  endif
+
   if(emtimings)then
     CALL SYSTEM_CLOCK(sc_1,sc_r,sc_m)
     write(12347,'(A,f12.6)')'t_cm_rhoemat',(sc_1-sc_0)*1.0d0/sc_r

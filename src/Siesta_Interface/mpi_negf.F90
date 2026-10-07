@@ -37,6 +37,7 @@ module mMPI_NEGF
 #endif
 
  use mNegfOutput, only: negf_output_init, negf_output_finalize, negf_abort
+ use negfmod, only: inversion_solver
  implicit none
  private
 
@@ -97,12 +98,18 @@ contains
   if(mod(nnodes_negfo,NParallelK).ne.0) call negf_abort( &
     "The total number of MPI processes must be an integer multiple of EM.ParallelOverKNum;"// &
     " change either the number of MPI processes or the value of EM.ParallelOverKNum", collective=.true.)
-  if(nprocs_inverse.ne.1) call negf_abort( &
-    "EM.NProcessorsInverse > 1 (inversion distributed over several processes) is not functional in this"// &
-    " libsmeagol build; use EM.NProcessorsInverse 1 (parallelism over energy points and k-points is unaffected)", &
+  if(inversion_solver.lt.0.or.inversion_solver.gt.2) call negf_abort( &
+    "EM.InverseSolver must be 0 (InvertSparseON), 1 (InvertSparseONv3) or 2 (distributed block-tridiagonal inversion)", &
     collective=.true.)
+  if(nprocs_inverse.lt.1) call negf_abort("EM.NProcessorsInverse must be at least 1", collective=.true.)
+  if(nprocs_inverse.ne.1.and.inversion_solver.ne.2) call negf_abort( &
+    "EM.NProcessorsInverse > 1 requires EM.InverseSolver 2 (distributed block-tridiagonal inversion, EM.OrderN .true.);"// &
+    " the other inversion solvers run on one process per energy point", collective=.true.)
 
   nprocs_k=nnodes_negfo/NParallelK
+  if(mod(nprocs_k,nprocs_inverse).ne.0) call negf_abort( &
+    "the number of MPI processes per k-point group (total / EM.ParallelOverKNum) must be an integer multiple of"// &
+    " EM.NProcessorsInverse", collective=.true.)
 !  write(12347,*)"nprocs_k=",nprocs_k,nnodes_negfo,NParallelK
   allocate(members_K(nprocs_k))
   zeronode=mynode_negfo-mod(mynode_negfo,nprocs_k)
