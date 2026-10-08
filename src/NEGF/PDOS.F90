@@ -108,8 +108,8 @@ SUBROUTINE em_dos_general(n,nuo,NSpinBlocks,NspinComplexMatrix,gf,empdos, emdost
       call em_dos_nc(n,NSpinBlocks,gf,empdos,emdostotk,empdostotk,sgeneral)
     else
 
-!      call PrintSparse2DenseReorderedNC(sgeneral,n/2, 1, NSpinBlocks, NspinComplexMatrix,2,"sp_2")
-!      call PrintSparse2DenseReorderedNC(gf,n/2, NspinComplexMatrix, NSpinBlocks, NspinComplexMatrix,1,"gp_2")
+!      call PrintSparse2DenseReorderedNC1(sgeneral,n/2,NSpinBlocks,NspinComplexMatrix,2,"sp_2")
+!      call PrintSparse2DenseReorderedNC1(gf,n/2,NSpinBlocks,NspinComplexMatrix,1,"gp_2")
       call em_dos_nc2(n,NSpinBlocks,NspinComplexMatrix,gf%matSparse,empdos,emdostotk,empdostotk,sgeneral%matSparse)
     endif
   endif
@@ -276,7 +276,7 @@ SUBROUTINE em_dos_nc2(n,NSpinBlocks,NspinComplexMatrix,gf,empdos, emdostotk,empd
   nhalf=n/2
 
   call set_s_half(nhalf,s,Shalf)
-!"  call PrintSparse2DenseReorderedNC(Shalf,nhalf, 1, NSpinBlocks, 4,2,"sp_1")
+!"  call PrintSparse2DenseReorderedNC1(Shalf_general,nhalf,NSpinBlocks,4,2,"sp_1")
 
 
 !!  call set_s_half(nhalf,s,Shalf_general)

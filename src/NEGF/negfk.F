@@ -312,7 +312,7 @@
         call PrintSparse2DenseReorderedNC(hgeneralp,n1,
      .      NspinComplexMatrix, NspinBlocks, NspinComplexMatrix,1,
      .      "hn_1")
-        call PrintSparse2DenseReorderedNC(sgeneralp,n1, 1, NspinBlocks,
+        call PrintSparse2DenseReorderedNC1(sgeneralp,n1,NspinBlocks,
      .      NspinComplexMatrix,2,"sn_1")
       endif
 
@@ -328,7 +328,7 @@
         call PrintSparse2DenseReorderedNC(hgeneralp,n1,
      .      NspinComplexMatrix, NspinBlocks, NspinComplexMatrix,1,
      .      "hn_2")
-        call PrintSparse2DenseReorderedNC(sgeneralp,n1, 1, NspinBlocks,
+        call PrintSparse2DenseReorderedNC1(sgeneralp,n1,NspinBlocks,
      .      NspinComplexMatrix,2,"sn_2")
       endif
 

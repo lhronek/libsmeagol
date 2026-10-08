@@ -1281,9 +1281,9 @@
         call PrintSparse2DenseReorderedNC(hgeneralp,n1/2,
      .      NspinComplexMatrix, NSpinBlocks, NspinComplexMatrix,1,
      .      "hk_3")
-        call PrintSparse2DenseReorderedNC(sgeneralp,n1/2, 1,
+        call PrintSparse2DenseReorderedNC1(sgeneralp,n1/2,
      .      NSpinBlocks,NspinComplexMatrix,2,"sk_3")
-        call PrintSparse2DenseReorderedNC(gf,n1/2, 1, NSpinBlocks,
+        call PrintSparse2DenseReorderedNC1(gf,n1/2,NSpinBlocks,
      .      NspinComplexMatrix,3,"gk_3")
       endif
 
@@ -1347,7 +1347,7 @@
           endif
 
           if(.false.)then
-            call PrintSparse2DenseReorderedNC(gf,n1/2, 1, NSpinBlocks,
+            call PrintSparse2DenseReorderedNC1(gf,n1/2,NSpinBlocks,
      .          NspinComplexMatrix,3,"gk_4")
           endif
 

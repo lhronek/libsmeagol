@@ -241,7 +241,7 @@ MODULE mNegf_Interface
 
 !!!!      if(.false.)then
 !!!!        call PrintSparse2DenseReorderedNC(hgeneralp,no_u, NspinComplexMatrix, NspinBlocks, NspinComplexMatrix,1,"hn_0")
-!!!!        call PrintSparse2DenseReorderedNC(sgeneralp,no_u, 1, NspinBlocks, NspinComplexMatrix,2,"sn_0")
+!!!!        call PrintSparse2DenseReorderedNC1(sgeneralp,no_u,NspinBlocks,NspinComplexMatrix,2,"sn_0")
 !!!!      endif
 
     endif
@@ -288,7 +288,7 @@ MODULE mNegf_Interface
 
 !!!!    if(.true.)then
 !!!!      call PrintSparse2DenseReorderedNC(hgeneralp,no_u, NspinComplexMatrix, NspinBlocks, NspinComplexMatrix,1,"hn_0")
-!!!!      call PrintSparse2DenseReorderedNC(sgeneralp,no_u, 1, NspinBlocks, NspinComplexMatrix,2,"sn_0")
+!!!!      call PrintSparse2DenseReorderedNC1(sgeneralp,no_u,NspinBlocks,NspinComplexMatrix,2,"sn_0")
 !!!!    endif
 
 

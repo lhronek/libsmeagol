@@ -525,39 +525,58 @@ subroutine PrintSparse2DenseReorderedNC(mat,n,nspinmat,nspin,NspinComplexMatrix,
 !  return !comment out  if output is wanted
   if(nspin<4)return
 
+! operation 1 with NspinComplexMatrix 4 assembles the four spin blocks mat(1:4); every other case uses mat(1) only
+  if(operation/=1.or.NspinComplexMatrix/=4)then
+    call PrintSparse2DenseReorderedNC1(mat(1),n,nspin,NspinComplexMatrix,operation,nam)
+    return
+  endif
+
   allocate(matbuf(2*n,2*n))
-!  write(12347,*)"start output of ",nam,"N=",n
+  matbuf=0.0D0
+  call sparsetodense(mat(1)%matSparse,matbuf(1:n,1:n),n)
+  call sparsetodense(mat(2)%matSparse,matbuf(n+1:2*n,n+1:2*n),n)
+  call sparsetodense(mat(3)%matSparse,matbuf(1:n,n+1:2*n),n)
+  if(.false.)then
+    matbuf(n+1:2*n,1:n)=DCONJG(transpose(matbuf(1:n,n+1:2*n)))
+  else
+    call sparsetodense(mat(4)%matSparse,matbuf(n+1:2*n,1:n),n)
+  endif
+
+  call writemat9(1,0.0D0,matbuf,2*n,2*n,0.0d0,nam)
+  deallocate(matbuf)
+
+end subroutine PrintSparse2DenseReorderedNC
+
+! single matrix: operation 2 (one sparse spin block copied to both diagonal blocks), 3 (dense storage), or the reordered layout when NspinComplexMatrix /= 4
+subroutine PrintSparse2DenseReorderedNC1(mat,n,nspin,NspinComplexMatrix,operation,nam)
+
+  use mTypes
+
+  integer, intent(in) :: n,nspin,NspinComplexMatrix,operation
+  type(matrixTypeGeneral), intent(in) :: mat
+  CHARACTER(LEN=*), intent(in) :: nam
+  double complex, allocatable ::  matbuf(:,:)
+
+  if(nspin<4)return
+
+  allocate(matbuf(2*n,2*n))
   matbuf=0.0D0
   if(NspinComplexMatrix==4)then
-    if(operation==1)then
-!      write(12346,*)"opi1",nam,nspinmat,nspin,NspinComplexMatrix
-      call sparsetodense(mat(1)%matSparse,matbuf(1:n,1:n),n)
-      call sparsetodense(mat(2)%matSparse,matbuf(n+1:2*n,n+1:2*n),n)
-      call sparsetodense(mat(3)%matSparse,matbuf(1:n,n+1:2*n),n)
-!      if(.true.)then
-      if(.false.)then
-        matbuf(n+1:2*n,1:n)=DCONJG(transpose(matbuf(1:n,n+1:2*n)))
-      else
-        call sparsetodense(mat(4)%matSparse,matbuf(n+1:2*n,1:n),n)
-      endif
-    elseif(operation==2)then
-!      write(12346,*)"opi2",nam,nspinmat,nspin,NspinComplexMatrix
-      call sparsetodense(mat(1)%matSparse,matbuf(1:n,1:n),n)
+    if(operation==2)then
+      call sparsetodense(mat%matSparse,matbuf(1:n,1:n),n)
       matbuf(n+1:2*n,n+1:2*n)=matbuf(1:n,1:n)
     elseif(operation==3)then
-!      write(12346,*)"opi3",nam,nspinmat,nspin,NspinComplexMatrix
-      matbuf=mat(1)%matdense%a
+      matbuf=mat%matdense%a
     endif
   else
-    call sparsetodense(mat(1)%matSparse,matbuf,2*n)
+    call sparsetodense(mat%matSparse,matbuf,2*n)
     call reorder_nc(matbuf,2*n)
   endif
 
   call writemat9(1,0.0D0,matbuf,2*n,2*n,0.0d0,nam)
   deallocate(matbuf)
 
-
-end subroutine PrintSparse2DenseReorderedNC
+end subroutine PrintSparse2DenseReorderedNC1
 
   SUBROUTINE mathermitianCRS(mat,matdagger)
 
