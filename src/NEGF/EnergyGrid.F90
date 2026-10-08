@@ -585,39 +585,43 @@ module mEnergyGrid
 
   END SUBROUTINE energy_points2
 
-  subroutine allocate_sigma_single(sigma,n,mynode,storesigmai,energy,vshift,deltaimag)
-
+  subroutine allocate_sigma_single(sigma,n,mynode,storesigmai,energy,vshift,deltaimag,ndiv)
     integer, intent(in) :: n,mynode,storesigmai
     real(kdp), intent(in) :: vshift,deltaimag
     complex(kdp), intent(in) :: energy
     type(SelfEnergyType), intent(inout) :: sigma
-  
-    allocate(sigma%sigma(n,n))
+    integer, intent(in), optional :: ndiv(2)
+    integer ns
+
+    sigma%ndiv=1
+    if(present(ndiv)) sigma%ndiv=ndiv
+    if(sigma%ndiv(1)*sigma%ndiv(2)>1)then
+      ns=n/(sigma%ndiv(1)*sigma%ndiv(2))
+      allocate(sigma%sigmak(ns,ns,sigma%ndiv(1),sigma%ndiv(2)))
+    else
+      allocate(sigma%sigma(n,n))
+    endif
     sigma%n=n
     sigma%node=mynode
     sigma%InfoSigma=storesigmai
     sigma%e=energy-vshift+(0.0_kdp,1.0_kdp)*deltaimag
-  
   end subroutine allocate_sigma_single
 
   subroutine deallocate_energygrid_selfenergies2(energygrid1)
-
     type(EnergyGridType), intent(inout) :: energygrid1
-  
     integer il
-  
+
     if(allocated(energygrid1%sigma))then
       do il=1,energygrid1%nLeads
         if(allocated(energygrid1%sigma(il,1,1,1)%sigma)) deallocate(energygrid1%sigma(il,1,1,1)%sigma)
+        if(allocated(energygrid1%sigma(il,1,1,1)%sigmak)) deallocate(energygrid1%sigma(il,1,1,1)%sigmak)
       enddo
       deallocate(energygrid1%sigma)
     endif
-  
     if(allocated(energygrid1%e))deallocate(energygrid1%e)
     if(allocated(energygrid1%w))deallocate(energygrid1%w)
     if(allocated(energygrid1%ig))deallocate(energygrid1%ig)
     if(allocated(energygrid1%eGlobal))deallocate(energygrid1%eGlobal)
-
   end subroutine deallocate_energygrid_selfenergies2
 
 
@@ -633,7 +637,8 @@ module mEnergyGrid
           do ispin=1,energygrid1%nspin
             do ie=1,energygrid1%nEnergies
               do il=1,energygrid1%nLeads
-                deallocate(energygrid1%sigma(il,ie,ispin,ik)%sigma)
+                if(allocated(energygrid1%sigma(il,ie,ispin,ik)%sigma)) deallocate(energygrid1%sigma(il,ie,ispin,ik)%sigma)
+                if(allocated(energygrid1%sigma(il,ie,ispin,ik)%sigmak)) deallocate(energygrid1%sigma(il,ie,ispin,ik)%sigmak)
               enddo
             enddo
           enddo
@@ -650,206 +655,131 @@ module mEnergyGrid
 
 
   subroutine read_selfenergies(ik,fsigma,energygrid1)
-
     use mMPI_NEGF
-
     integer, intent(in) :: ik
     character(LEN=*), intent(in) ::  fsigma
     type(EnergyGridType), intent(inout) :: energygrid1
-
-    integer ispin,ie,il,ihead,bytes_sigma,sigma_io
-    integer MPIerror,i1,i2
-    type(SelfEnergyType), allocatable :: sigma_buffer(:)
-    integer rec1
+    integer ispin,ie,il,ihead,len,sigma_io,rec1,pos,MPIerror
+    complex(kdp), allocatable :: rec(:)
 #ifdef MPI
     INTEGER, DIMENSION (MPI_STATUS_SIZE) :: istatus
 #endif
 
+    len=sigma_record_len(energygrid1)
+    allocate(rec(len))
     if(myhead==0)then
-
       sigma_io=22349
-
-      allocate(sigma_buffer(energygrid1%nLeads))
-      do il=1,energygrid1%nLeads
-        call allocate_sigma_single(sigma_buffer(il),energygrid1%leadsTotalDim(il),myhead,0,(0.0_kdp,0.0_kdp),0.0_kdp,0.0_kdp)
-      enddo
-
-      bytes_sigma=sigma_file_recl(energygrid1)
-
-      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
-
+      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=sigma_file_recl(energygrid1))
       rec1=1+energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
       do ie=1,energygrid1%nEnergies
         do ispin=1,energygrid1%nspin
           rec1=rec1+1
-          read(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
-
+          read(sigma_io,REC=rec1) rec
+          pos=0
           do il=1,energygrid1%nLeads
-            energygrid1%sigma(il,ie,ispin,ik)%sigma=sigma_buffer(il)%sigma
+            call unpack_sigma_element(rec,pos,energygrid1%sigma(il,ie,ispin,ik))
           enddo
         enddo
       enddo
-
-
 #ifdef MPI
       do ihead=1,nheads-1
-
         do ie=1,energygrid1%nEnergies
           do ispin=1,energygrid1%nspin
-
             rec1=rec1+1
-            read(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
-
-            do il=1,energygrid1%nLeads
-              call MPI_SEND(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex,ihead,1,inverseheads_comm,MPIerror)
-            enddo
-
+            read(sigma_io,REC=rec1) rec
+            call MPI_SEND(rec,len,DAT_dcomplex,ihead,1,inverseheads_comm,MPIerror)
           enddo
         enddo
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
-
       enddo
 #endif
-
       close(sigma_io)
-
-      do il=1,energygrid1%nLeads
-        deallocate(sigma_buffer(il)%sigma)
-      enddo
-      deallocate(sigma_buffer)
-
 #ifdef MPI
     else
-
-      allocate(sigma_buffer(energygrid1%nLeads))
-      do il=1,energygrid1%nLeads
-        call allocate_sigma_single(sigma_buffer(il),energygrid1%leadsTotalDim(il),myhead,0,(0.0_kdp,0.0_kdp),0.0_kdp,0.0_kdp)
-      enddo
-
       do ihead=1,nheads-1
         if(myhead.eq.ihead)then
-
           do ie=1,energygrid1%nEnergies
             do ispin=1,energygrid1%nspin
+              call MPI_RECV(rec,len,DAT_dcomplex, 0, 1, inverseheads_comm, istatus, MPIerror)
+              pos=0
               do il=1,energygrid1%nLeads
-                call MPI_RECV(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex, 0, 1, inverseheads_comm, istatus, MPIerror)
-                energygrid1%sigma(il,ie,ispin,ik)%sigma=sigma_buffer(il)%sigma
+                call unpack_sigma_element(rec,pos,energygrid1%sigma(il,ie,ispin,ik))
               enddo
             enddo
           enddo
-
         endif
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
       enddo
-
-      do il=1,energygrid1%nLeads
-        deallocate(sigma_buffer(il)%sigma)
-      enddo
-      deallocate(sigma_buffer)
-
 #endif
-
     endif
-
-
-
+    deallocate(rec)
   end SUBROUTINE read_selfenergies
 
 
   subroutine write_selfenergies(ik,fsigma,energygrid1)
-
     use mMPI_NEGF
-
     integer, intent(in) :: ik
     character(LEN=*), intent(in) ::  fsigma
     type(EnergyGridType), intent(in) :: energygrid1
-
-    integer ispin,ie,il,ihead,bytes_sigma,sigma_io,rec1
-    integer MPIerror,i1,i2
-    type(SelfEnergyType), allocatable :: sigma_buffer(:)
+    integer ispin,ie,il,ihead,len,sigma_io,rec1,pos,MPIerror
+    complex(kdp), allocatable :: rec(:)
 #ifdef MPI
     INTEGER, DIMENSION (MPI_STATUS_SIZE) :: istatus
 #endif
 
+    len=sigma_record_len(energygrid1)
+    allocate(rec(len))
     if(myhead==0)then
-
-      allocate(sigma_buffer(energygrid1%nLeads))
-      do il=1,energygrid1%nLeads
-        call allocate_sigma_single(sigma_buffer(il),energygrid1%leadsTotalDim(il),myhead,0,(0.0_kdp,0.0_kdp),0.0_kdp,0.0_kdp)
-      enddo
-
-      bytes_sigma=sigma_file_recl(energygrid1)
-
-
       sigma_io=22349
       if(ik==1)then
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=sigma_file_recl(energygrid1))
         call write_sigma_file_header(sigma_io,energygrid1)
       else
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=sigma_file_recl(energygrid1))
       endif
-
       rec1=1+energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
       do ie=1,energygrid1%nEnergies
         do ispin=1,energygrid1%nspin
-
           rec1=rec1+1
-          write(sigma_io,REC=rec1)(energygrid1%sigma(il,ie,ispin,ik)%sigma,il=1,energygrid1%nLeads)
-
+          pos=0
+          do il=1,energygrid1%nLeads
+            call pack_sigma_element(energygrid1%sigma(il,ie,ispin,ik),rec,pos)
+          enddo
+          write(sigma_io,REC=rec1) rec
         enddo
       enddo
-
-
-
 #ifdef MPI
       do ihead=1,nheads-1
-
         do ie=1,energygrid1%nEnergies
           do ispin=1,energygrid1%nspin
-
-            do il=1,energygrid1%nLeads
-              call MPI_RECV(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex, ihead, 1, inverseheads_comm, istatus, MPIerror)
-            enddo
+            call MPI_RECV(rec,len,DAT_dcomplex, ihead, 1, inverseheads_comm, istatus, MPIerror)
             rec1=rec1+1
-            write(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
-
+            write(sigma_io,REC=rec1) rec
           enddo
         enddo
-
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
       enddo
 #endif
       close(sigma_io)
-
-      do il=1,energygrid1%nLeads
-        deallocate(sigma_buffer(il)%sigma)
-      enddo
-      deallocate(sigma_buffer)
-
-
 #ifdef MPI
     else
-
-
       do ihead=1,nheads-1
         if(myhead.eq.ihead)then
-
           do ie=1,energygrid1%nEnergies
             do ispin=1,energygrid1%nspin
+              pos=0
               do il=1,energygrid1%nLeads
-                call MPI_SEND(energygrid1%sigma(il,ie,ispin,ik)%sigma,energygrid1%sigma(il,ie,ispin,ik)%n**2,DAT_dcomplex,0,1,inverseheads_comm,MPIerror)
+                call pack_sigma_element(energygrid1%sigma(il,ie,ispin,ik),rec,pos)
               enddo
+              call MPI_SEND(rec,len,DAT_dcomplex,0,1,inverseheads_comm,MPIerror)
             enddo
           enddo
-
         endif
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
       enddo
-
-
 #endif
     endif
-
+    deallocate(rec)
   end SUBROUTINE write_selfenergies
 
 
@@ -865,7 +795,7 @@ module mEnergyGrid
     integer(kind=8) hleads
     real(kdp) hene,henetot
 
-    nid=9+2*energygrid1%nLeads
+    nid=9+4*energygrid1%nLeads
     if(allocated(energygrid1%fileid)) deallocate(energygrid1%fileid)
     allocate(energygrid1%fileid(nid))
 
@@ -903,6 +833,8 @@ module mEnergyGrid
     do il=1,energygrid1%nLeads
       energygrid1%fileid(9+il)=energygrid1%leadsTotalDim(il)
       energygrid1%fileid(9+energygrid1%nLeads+il)=transfer(LeadsVoltageShift(il),0_8)
+      energygrid1%fileid(9+2*energygrid1%nLeads+2*il-1)=energygrid1%sigma(il,1,1,1)%ndiv(1)
+      energygrid1%fileid(9+2*energygrid1%nLeads+2*il)=energygrid1%sigma(il,1,1,1)%ndiv(2)
     enddo
   end subroutine sigma_file_identity
 
@@ -925,17 +857,82 @@ module mEnergyGrid
     enddo
   end subroutine mix64_array
 
-! record length: the self-energies of all leads at one energy, at least the identity record
+! record length: the self-energies of all leads at one energy (Bloch blocks for Bloch leads), the channel counts, at least the identity record
   function sigma_file_recl(energygrid1) result(recl)
     type(EnergyGridType), intent(in) :: energygrid1
-    integer :: recl,il
-    recl=0
-    do il=1,energygrid1%nLeads
-      recl=recl+16*energygrid1%leadsTotalDim(il)**2
-    enddo
-    recl=recl+8*energygrid1%nLeads
+    integer :: recl
+    recl=16*sigma_record_len(energygrid1)+8*energygrid1%nLeads
     if(allocated(energygrid1%fileid)) recl=max(recl,8*(1+size(energygrid1%fileid)))
   end function sigma_file_recl
+
+! complex elements of one record: per lead the Bloch blocks (ns*ns*Nx*Ny) or the full matrix (n*n)
+  function sigma_record_len(energygrid1) result(len)
+    type(EnergyGridType), intent(in) :: energygrid1
+    integer :: len,il,n,nd(2)
+    len=0
+    do il=1,energygrid1%nLeads
+      n=energygrid1%leadsTotalDim(il)
+      nd=energygrid1%sigma(il,1,1,1)%ndiv
+      if(nd(1)*nd(2)>1)then
+        len=len+(n/(nd(1)*nd(2)))**2*nd(1)*nd(2)
+      else
+        len=len+n*n
+      endif
+    enddo
+  end function sigma_record_len
+
+  subroutine pack_sigma_element(sig,rec,pos)
+    type(SelfEnergyType), intent(in) :: sig
+    complex(kdp), intent(inout) :: rec(:)
+    integer, intent(inout) :: pos
+    integer m
+    if(allocated(sig%sigmak))then
+      m=size(sig%sigmak)
+      rec(pos+1:pos+m)=reshape(sig%sigmak,(/m/))
+    else
+      m=size(sig%sigma)
+      rec(pos+1:pos+m)=reshape(sig%sigma,(/m/))
+    endif
+    pos=pos+m
+  end subroutine pack_sigma_element
+
+  subroutine unpack_sigma_element(rec,pos,sig)
+    complex(kdp), intent(in) :: rec(:)
+    integer, intent(inout) :: pos
+    type(SelfEnergyType), intent(inout) :: sig
+    integer m
+    if(allocated(sig%sigmak))then
+      m=size(sig%sigmak)
+      sig%sigmak=reshape(rec(pos+1:pos+m),shape(sig%sigmak))
+    else
+      m=size(sig%sigma)
+      sig%sigma=reshape(rec(pos+1:pos+m),shape(sig%sigma))
+    endif
+    pos=pos+m
+  end subroutine unpack_sigma_element
+
+! full matrix from the record part of a lead with Bloch divisions nd
+  subroutine unpack_sigma_full(rec,pos,nd,n,sigma)
+    use mSigmaFourier, only: BlochExpandSigma
+    complex(kdp), intent(in) :: rec(:)
+    integer, intent(inout) :: pos
+    integer, intent(in) :: nd(2),n
+    complex(kdp), intent(out) :: sigma(n,n)
+    integer m,ns
+    complex(kdp), allocatable :: blocks(:,:,:,:)
+    if(nd(1)*nd(2)>1)then
+      ns=n/(nd(1)*nd(2))
+      m=ns*ns*nd(1)*nd(2)
+      allocate(blocks(ns,ns,nd(1),nd(2)))
+      blocks=reshape(rec(pos+1:pos+m),(/ns,ns,nd(1),nd(2)/))
+      call BlochExpandSigma(nd,ns,n,blocks,sigma)
+      deallocate(blocks)
+    else
+      m=n*n
+      sigma=reshape(rec(pos+1:pos+m),(/n,n/))
+    endif
+    pos=pos+m
+  end subroutine unpack_sigma_full
 
   subroutine write_sigma_file_header(sigma_io,energygrid1)
     integer, intent(in) :: sigma_io
@@ -1005,19 +1002,19 @@ module mEnergyGrid
 
 
   subroutine allocate_sigma2(storesigmai,LeadsVoltageShift,energygrid1)
-  
     use mMPI_NEGF
-  
+    use mSelfenergies, only: BlochDivisions
+    use mNegfOutput, only: negf_log_unit
     implicit none
-    
     type(EnergyGridType), intent(inout) :: energygrid1
     integer, intent(in) :: storesigmai
     real(kdp), intent(in) :: LeadsVoltageShift(energygrid1%nLeads)
-    integer ikl,ispin,ie,il,n
-  
+    integer ikl,ispin,ie,il,n,ns,nd(2)
+    real(kdp) :: bytes
+
     if (allocated(energygrid1%sigma)) deallocate(energygrid1%sigma)
     allocate(energygrid1%sigma(energygrid1%nLeads,energygrid1%nEnergies,energygrid1%nspin,energygrid1%nk))
-
+    bytes=0.0_kdp
     do ikl=1,energygrid1%nk
       do ispin=1,energygrid1%nspin
         do ie=1,energygrid1%nEnergies
@@ -1027,171 +1024,138 @@ module mEnergyGrid
             elseif(il==2)then
               energygrid1%sigma(il,ie,ispin,ikl)%side='R'
             endif
- 
             n=energygrid1%leadsTotalDim(il)
+            nd=BlochDivisions(il)
             energygrid1%sigma(il,ie,ispin,ikl)%n=n
             energygrid1%sigma(il,ie,ispin,ikl)%node=myhead
             energygrid1%sigma(il,ie,ispin,ikl)%InfoSigma=storesigmai
+            energygrid1%sigma(il,ie,ispin,ikl)%ndiv=nd
             energygrid1%sigma(il,ie,ispin,ikl)%e=energygrid1%e(ie)-LeadsVoltageShift(il)+(0.0_kdp,1.0_kdp)*energygrid1%deltasigma
-  
-            if(storesigmai==0) allocate(energygrid1%sigma(il,ie,ispin,ikl)%sigma(n,n))
-
+            if(storesigmai==0)then
+! Bloch leads keep the ns x ns blocks at the Nx*Ny folding k-points (1/(Nx*Ny) of the full matrix)
+              if(nd(1)*nd(2)>1)then
+                ns=n/(nd(1)*nd(2))
+                allocate(energygrid1%sigma(il,ie,ispin,ikl)%sigmak(ns,ns,nd(1),nd(2)))
+                bytes=bytes+16.0_kdp*ns*ns*nd(1)*nd(2)
+              else
+                allocate(energygrid1%sigma(il,ie,ispin,ikl)%sigma(n,n))
+                bytes=bytes+16.0_kdp*n*n
+              endif
+            endif
           enddo
         enddo
       enddo
     enddo
-  
+    if(storesigmai==0.and.myhead==0) write(negf_log_unit,'(A,F12.3,A,I0,A)') &
+      "self-energy cache on this head: ",bytes/1048576.0_kdp," MB for ",energygrid1%nEnergies," energies"
   end subroutine allocate_sigma2
 
   subroutine write_single_selfenergy(sigma_buffer,ik,ispin,ie,energygrid1)
-
     use mMPI_NEGF
-
     integer, intent(in) :: ik,ispin,ie
     type(EnergyGridType), intent(in) :: energygrid1
     type(SelfEnergyType), intent(inout) :: sigma_buffer(energygrid1%nLeads)
-
-
-    integer il,ihead,bytes_sigma,sigma_io
-    integer MPIerror,i1,i2
-    integer rec1
+    integer il,ihead,len,sigma_io,rec1,pos,MPIerror
+    complex(kdp), allocatable :: rec(:)
 #ifdef MPI
     INTEGER, DIMENSION (MPI_STATUS_SIZE) :: istatus
 #endif
     character fsigma*250,char_bias*7
 
-
     write(char_bias,'(f7.4)')energygrid1%v*13.6057_kdp
     fsigma=trim(energygrid1%sLabel)//'.V_'//TRIM(ADJUSTL(char_bias))//trim(energygrid1%SigmaSuffix)
-
+    len=sigma_record_len(energygrid1)
+    allocate(rec(len))
+    pos=0
+    do il=1,energygrid1%nLeads
+      call pack_sigma_element(sigma_buffer(il),rec,pos)
+    enddo
     if(myhead==0)then
-
       sigma_io=22349
-
-      bytes_sigma=sigma_file_recl(energygrid1)
-
       if(ik==1)then
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=sigma_file_recl(energygrid1))
         call write_sigma_file_header(sigma_io,energygrid1)
       else
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=sigma_file_recl(energygrid1))
       endif
-
-
-!***********************
       rec1=1+energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
       rec1=rec1+(ie-1) * nheads *energygrid1%nspin+ispin
-
-      write(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
-
+      write(sigma_io,REC=rec1) rec
 #ifdef MPI
       do ihead=1,nheads-1
-
-        do il=1,energygrid1%nLeads
-          call MPI_RECV(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex, ihead, 1, inverseheads_comm, istatus, MPIerror)
-        enddo
-
+        call MPI_RECV(rec,len,DAT_dcomplex, ihead, 1, inverseheads_comm, istatus, MPIerror)
         rec1=rec1+energygrid1%nspin
-        write(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
-
+        write(sigma_io,REC=rec1) rec
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
-
       enddo
 #endif
-
-      
       close(sigma_io)
-
 #ifdef MPI
     else
-
       do ihead=1,nheads-1
         if(myhead.eq.ihead)then
-
-          do il=1,energygrid1%nLeads
-            call MPI_SEND(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex,0,1,inverseheads_comm,MPIerror)
-          enddo
-
+          call MPI_SEND(rec,len,DAT_dcomplex,0,1,inverseheads_comm,MPIerror)
         endif
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
       enddo
-
 #endif
     endif
-
+    deallocate(rec)
   end SUBROUTINE write_single_selfenergy
 
 
   subroutine readsingle_selfenergy(sigma_buffer,ik,ispin,ie,energygrid1)
-
     use mMPI_NEGF
-
     integer, intent(in) :: ik,ispin,ie
     type(EnergyGridType), intent(inout) :: energygrid1
     type(SelfEnergyType), intent(inout) :: sigma_buffer(energygrid1%nLeads)
-
-
-    integer il,ihead,bytes_sigma,sigma_io
-    integer MPIerror,i1,i2
-    integer rec1
+    integer il,ihead,len,sigma_io,rec1,pos,MPIerror
+    complex(kdp), allocatable :: rec(:)
 #ifdef MPI
     INTEGER, DIMENSION (MPI_STATUS_SIZE) :: istatus
 #endif
     character fsigma*250,char_bias*7
 
-
     write(char_bias,'(f7.4)')energygrid1%v*13.6057_kdp
     fsigma=trim(energygrid1%sLabel)//'.V_'//TRIM(ADJUSTL(char_bias))//trim(energygrid1%SigmaSuffix)
-
+    len=sigma_record_len(energygrid1)
+    allocate(rec(len))
     if(myhead==0)then
-
       sigma_io=22349
-
-      bytes_sigma=sigma_file_recl(energygrid1)
-
-      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
-
-!***********************
+      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=sigma_file_recl(energygrid1))
       rec1=1+energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
       rec1=rec1+ie * nheads *energygrid1%nspin+ispin
-
 #ifdef MPI
       do ihead=nheads-1,1,-1
-
         rec1=rec1-energygrid1%nspin
-        read(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
-
-        do il=1,energygrid1%nLeads
-          call MPI_SEND(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex,ihead,1,inverseheads_comm,MPIerror)
-        enddo
-
+        read(sigma_io,REC=rec1) rec
+        call MPI_SEND(rec,len,DAT_dcomplex,ihead,1,inverseheads_comm,MPIerror)
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
-
       enddo
 #endif
-
       rec1=rec1-energygrid1%nspin
-      read(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
-
+      read(sigma_io,REC=rec1) rec
       close(sigma_io)
-
 #ifdef MPI
     else
-
       do ihead=nheads-1,1,-1
         if(myhead.eq.ihead)then
-
-          do il=1,energygrid1%nLeads
-            call MPI_RECV(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex, 0, 1, inverseheads_comm, istatus, MPIerror)
-          enddo
-
+          call MPI_RECV(rec,len,DAT_dcomplex, 0, 1, inverseheads_comm, istatus, MPIerror)
         endif
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
       enddo
-
 #endif
     endif
-
+! the working self-energies are full matrices: the Bloch blocks of a compact record are expanded
+    pos=0
+    do il=1,energygrid1%nLeads
+      if(allocated(sigma_buffer(il)%sigmak))then
+        call unpack_sigma_element(rec,pos,sigma_buffer(il))
+      else
+        call unpack_sigma_full(rec,pos,energygrid1%sigma(il,1,1,1)%ndiv,sigma_buffer(il)%n,sigma_buffer(il)%sigma)
+      endif
+    enddo
+    deallocate(rec)
   end SUBROUTINE readsingle_selfenergy
 
 
@@ -1224,6 +1188,24 @@ module mEnergyGrid
 
   end SUBROUTINE single_selfenergy
 
+  subroutine single_selfenergy_compact(sigmak,il,ik,ispin,ie,energygrid1)
+    use sigma, only: h0_l,h1_l,s0_l,s1_l,h0_r,h1_r,s0_r,s1_r
+    use mSelfenergies, only : SelfEnergyGeneral
+    integer, intent(in) :: il,ik,ispin,ie
+    complex(kdp),intent(out) :: sigmak(:,:,:,:)
+    type(EnergyGridType), intent(in) :: energygrid1
+    integer nchan,n
+
+    n=energygrid1%sigma(il,ie,ispin,ik)%n
+    if(energygrid1%sigma(il,ie,ispin,ik)%Side=='L')then
+      call SelfEnergyGeneral('L',n,energygrid1%sigma(il,ie,ispin,ik)%e,H0_L(:,:,ispin), H1_L(:,:,ispin),S0_L(:,:),S1_L(:,:), &
+        nchan=nchan,delta=0.0_kdp,DoFourier=.true.,sigmak=sigmak)
+    else
+      call SelfEnergyGeneral('R',n,energygrid1%sigma(il,ie,ispin,ik)%e,H0_R(:,:,ispin), H1_R(:,:,ispin),S0_R(:,:),S1_R(:,:), &
+        nchan=nchan,delta=0.0_kdp,DoFourier=.true.,sigmak=sigmak)
+    endif
+  end subroutine single_selfenergy_compact
+
 
   subroutine all_selfenergies(ik,istart,iend,ispinstart,ispinend,energygrid1,ispinHin)
 
@@ -1248,7 +1230,12 @@ module mEnergyGrid
       do ie=istart,iend
         if(emtimings)CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
 
-        call SelfEnergyGeneral('L',energygrid1%sigma(1,ie,ispin,ik)%n ,energygrid1%sigma(1,ie,ispin,ik)%e,H0_L(:,:,ispinh), H1_L(:,:,ispinh),S0_L(:,:),S1_L(:,:),energygrid1%sigma(1,ie,ispin,ik)%sigma ,nchan,0.0_kdp,DoFourier)
+        if(allocated(energygrid1%sigma(1,ie,ispin,ik)%sigmak))then
+          call SelfEnergyGeneral('L',energygrid1%sigma(1,ie,ispin,ik)%n ,energygrid1%sigma(1,ie,ispin,ik)%e,H0_L(:,:,ispinh), H1_L(:,:,ispinh),S0_L(:,:),S1_L(:,:), &
+            nchan=nchan,delta=0.0_kdp,DoFourier=DoFourier,sigmak=energygrid1%sigma(1,ie,ispin,ik)%sigmak)
+        else
+          call SelfEnergyGeneral('L',energygrid1%sigma(1,ie,ispin,ik)%n ,energygrid1%sigma(1,ie,ispin,ik)%e,H0_L(:,:,ispinh), H1_L(:,:,ispinh),S0_L(:,:),S1_L(:,:),energygrid1%sigma(1,ie,ispin,ik)%sigma ,nchan,0.0_kdp,DoFourier)
+        endif
         DoFourier=.false.
         
         if(ispinHin.ne.0)energygrid1%sigma(1,ie,ispin,ik)%nchannels=nchan
@@ -1264,7 +1251,12 @@ module mEnergyGrid
       do ie=istart,iend
         if(emtimings)CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
 
-        call SelfEnergyGeneral('R',energygrid1%sigma(2,ie,ispin,ik)%n ,energygrid1%sigma(2,ie,ispin,ik)%e,H0_R(:,:,ispinh), H1_R(:,:,ispinh),S0_R(:,:),S1_R(:,:),energygrid1%sigma(2,ie,ispin,ik)%sigma ,nchan,0.0_kdp,DoFourier)
+        if(allocated(energygrid1%sigma(2,ie,ispin,ik)%sigmak))then
+          call SelfEnergyGeneral('R',energygrid1%sigma(2,ie,ispin,ik)%n ,energygrid1%sigma(2,ie,ispin,ik)%e,H0_R(:,:,ispinh), H1_R(:,:,ispinh),S0_R(:,:),S1_R(:,:), &
+            nchan=nchan,delta=0.0_kdp,DoFourier=DoFourier,sigmak=energygrid1%sigma(2,ie,ispin,ik)%sigmak)
+        else
+          call SelfEnergyGeneral('R',energygrid1%sigma(2,ie,ispin,ik)%n ,energygrid1%sigma(2,ie,ispin,ik)%e,H0_R(:,:,ispinh), H1_R(:,:,ispinh),S0_R(:,:),S1_R(:,:),energygrid1%sigma(2,ie,ispin,ik)%sigma ,nchan,0.0_kdp,DoFourier)
+        endif
         DoFourier=.false.
         
         if(ispinHin.ne.0)energygrid1%sigma(2,ie,ispin,ik)%nchannels=nchan
@@ -2136,7 +2128,8 @@ module mEnergyGrid
       do ispin=1,energygrid1%nspin
         do ie=1,energygrid1%nEnergies
           do il=1,energygrid1%nLeads
-            deallocate(energygrid1%sigma(il,ie,ispin,ik)%sigma)
+            if(allocated(energygrid1%sigma(il,ie,ispin,ik)%sigma)) deallocate(energygrid1%sigma(il,ie,ispin,ik)%sigma)
+            if(allocated(energygrid1%sigma(il,ie,ispin,ik)%sigmak)) deallocate(energygrid1%sigma(il,ie,ispin,ik)%sigmak)
           enddo
         enddo
       enddo
@@ -2162,7 +2155,11 @@ module mEnergyGrid
       do ispin=1,energygrid1%nspin
         do ie=1,nold
           do il=1,energygrid1%nLeads
-            energygrid1%sigma(il,ie,ispin,ik)%sigma=energygrid_buffer%sigma(il,ie,ispin,ik)%sigma
+            if(allocated(energygrid_buffer%sigma(il,ie,ispin,ik)%sigmak))then
+              energygrid1%sigma(il,ie,ispin,ik)%sigmak=energygrid_buffer%sigma(il,ie,ispin,ik)%sigmak
+            else
+              energygrid1%sigma(il,ie,ispin,ik)%sigma=energygrid_buffer%sigma(il,ie,ispin,ik)%sigma
+            endif
           enddo
         enddo
       enddo
@@ -2176,7 +2173,8 @@ module mEnergyGrid
       do ispin=1,energygrid_buffer%nspin
         do ie=1,energygrid_buffer%nEnergies
           do il=1,energygrid_buffer%nLeads
-            deallocate(energygrid_buffer%sigma(il,ie,ispin,ik)%sigma)
+            if(allocated(energygrid_buffer%sigma(il,ie,ispin,ik)%sigma)) deallocate(energygrid_buffer%sigma(il,ie,ispin,ik)%sigma)
+            if(allocated(energygrid_buffer%sigma(il,ie,ispin,ik)%sigmak)) deallocate(energygrid_buffer%sigma(il,ie,ispin,ik)%sigmak)
           enddo
         enddo
       enddo
@@ -2187,17 +2185,15 @@ module mEnergyGrid
 
 
   subroutine deallocate_selfenergies(ie,ispin,ik,energygrid1)
-
     integer, intent(in) :: ie,ispin,ik
     type(EnergyGridType), intent(inout) :: energygrid1
-
     integer il
 
     do il=1,energygrid1%nLeads
-      deallocate(energygrid1%sigma(il,1,1,1)%sigma)
+      if(allocated(energygrid1%sigma(il,1,1,1)%sigma)) deallocate(energygrid1%sigma(il,1,1,1)%sigma)
+      if(allocated(energygrid1%sigma(il,1,1,1)%sigmak)) deallocate(energygrid1%sigma(il,1,1,1)%sigmak)
     enddo
     deallocate(energygrid1%sigma)
-
   end subroutine deallocate_selfenergies
 
 
@@ -2241,184 +2237,112 @@ module mEnergyGrid
 
 
   subroutine write_selfenergies_transmission(ik,ispin,ie,fsigma,energygrid1)
-
     use mMPI_NEGF
-
     integer, intent(in) :: ik,ispin,ie
     character(LEN=*), intent(in) ::  fsigma
     type(EnergyGridType), intent(in) :: energygrid1
-
-    integer il,ihead,bytes_sigma,sigma_io,rec1
-    integer MPIerror,i1,i2
-    type(SelfEnergyType), allocatable :: sigma_buffer(:)
+    integer il,ihead,len,sigma_io,rec1,pos,MPIerror
+    complex(kdp), allocatable :: rec(:)
+    integer, allocatable :: nch(:)
 #ifdef MPI
     INTEGER, DIMENSION (MPI_STATUS_SIZE) :: istatus
 #endif
 
+    len=sigma_record_len(energygrid1)
+    allocate(rec(len),nch(energygrid1%nLeads))
+    pos=0
+    do il=1,energygrid1%nLeads
+      call pack_sigma_element(energygrid1%sigma(il,1,1,1),rec,pos)
+      nch(il)=energygrid1%sigma(il,1,1,1)%nchannels
+    enddo
     if(myhead==0)then
-
-      allocate(sigma_buffer(energygrid1%nLeads))
-      do il=1,energygrid1%nLeads
-        call allocate_sigma_single(sigma_buffer(il),energygrid1%leadsTotalDim(il),myhead,0,(0.0_kdp,0.0_kdp),0.0_kdp,0.0_kdp)
-      enddo
-
-      bytes_sigma=sigma_file_recl(energygrid1)
-
       sigma_io=22349
       if(ik==1)then
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=sigma_file_recl(energygrid1))
         call write_sigma_file_header(sigma_io,energygrid1)
       else
-        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
+        OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=sigma_file_recl(energygrid1))
       endif
-
-      rec1= 1 + (ie-1) * nheads  + ETransmGrid%nEnergiesGlobal  * (ispin-1) + ETransmGrid%nEnergiesGlobal  * ETransmGrid%nspin * (ik-1)  
+      rec1= 1 + (ie-1) * nheads  + ETransmGrid%nEnergiesGlobal  * (ispin-1) + ETransmGrid%nEnergiesGlobal  * ETransmGrid%nspin * (ik-1)
       rec1=rec1+1
-      write(sigma_io,REC=rec1)(energygrid1%sigma(il,1,1,1)%sigma,il=1,energygrid1%nLeads), &
-        (energygrid1%sigma(il,1,1,1)%nchannels,il=1,energygrid1%nLeads)
-
+      write(sigma_io,REC=rec1) rec,nch
 #ifdef MPI
       do ihead=1,nheads-1
-        do il=1,energygrid1%nLeads
-          call MPI_RECV(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex, ihead, 1, inverseheads_comm, istatus, MPIerror)
-          call MPI_RECV(sigma_buffer(il)%nchannels,1,MPI_integer, ihead, 2, inverseheads_comm, istatus, MPIerror)
-        enddo
+        call MPI_RECV(rec,len,DAT_dcomplex, ihead, 1, inverseheads_comm, istatus, MPIerror)
+        call MPI_RECV(nch,energygrid1%nLeads,MPI_integer, ihead, 2, inverseheads_comm, istatus, MPIerror)
         rec1=rec1+1
-        write(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads),(sigma_buffer(il)%nchannels,il=1,energygrid1%nLeads)
+        write(sigma_io,REC=rec1) rec,nch
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
       enddo
 #endif
-
       close(sigma_io)
-
-      do il=1,energygrid1%nLeads
-        deallocate(sigma_buffer(il)%sigma)
-      enddo
-      deallocate(sigma_buffer)
-
-
 #ifdef MPI
     else
-
-
       do ihead=1,nheads-1
         if(myhead.eq.ihead)then
-
-          do il=1,energygrid1%nLeads
-            call MPI_SEND(energygrid1%sigma(il,1,1,1)%sigma,energygrid1%sigma(il,1,1,1)%n**2,DAT_dcomplex,0,1,inverseheads_comm,MPIerror)
-            call MPI_SEND(energygrid1%sigma(il,1,1,1)%nchannels,1,MPI_integer,0,2,inverseheads_comm,MPIerror)
-          enddo
-
+          call MPI_SEND(rec,len,DAT_dcomplex,0,1,inverseheads_comm,MPIerror)
+          call MPI_SEND(nch,energygrid1%nLeads,MPI_integer,0,2,inverseheads_comm,MPIerror)
         endif
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
       enddo
-
 #endif
-
     endif
-
+    deallocate(rec,nch)
   end SUBROUTINE write_selfenergies_transmission
 
   subroutine read_selfenergies_transmission(ik,ispin,ie,fsigma,energygrid1)
-
     use mMPI_NEGF
-
     integer, intent(in) :: ik,ispin,ie
     character(LEN=*), intent(in) ::  fsigma
     type(EnergyGridType), intent(inout) :: energygrid1
-
-    integer il,ihead,bytes_sigma,sigma_io
-    integer MPIerror,i1,i2
-    type(SelfEnergyType), allocatable :: sigma_buffer(:)
-    integer rec1
+    integer il,ihead,len,sigma_io,rec0,rec1,pos,MPIerror
+    complex(kdp), allocatable :: rec(:)
+    integer, allocatable :: nch(:)
 #ifdef MPI
     INTEGER, DIMENSION (MPI_STATUS_SIZE) :: istatus
 #endif
 
+    len=sigma_record_len(energygrid1)
+    allocate(rec(len),nch(energygrid1%nLeads))
     if(myhead==0)then
-
       sigma_io=22349
-
-      allocate(sigma_buffer(energygrid1%nLeads))
-      do il=1,energygrid1%nLeads
-        call allocate_sigma_single(sigma_buffer(il),energygrid1%leadsTotalDim(il),myhead,0,(0.0_kdp,0.0_kdp),0.0_kdp,0.0_kdp)
-      enddo
-
-      bytes_sigma=sigma_file_recl(energygrid1)
-
-      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
-
-!***********************
-      rec1= 1 + (ie-1) * nheads  + ETransmGrid%nEnergiesGlobal  * (ispin-1) + ETransmGrid%nEnergiesGlobal  * ETransmGrid%nspin * (ik-1)  
-
-      rec1=rec1+1
-      read(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads),(sigma_buffer(il)%nchannels,il=1,energygrid1%nLeads)
-
-      do il=1,energygrid1%nLeads
-        energygrid1%sigma(il,1,1,1)%sigma=sigma_buffer(il)%sigma
-        energygrid1%sigma(il,1,1,1)%nchannels=sigma_buffer(il)%nchannels
-      enddo
-
-
+      OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=sigma_file_recl(energygrid1))
+      rec0= 2 + (ie-1) * nheads  + ETransmGrid%nEnergiesGlobal  * (ispin-1) + ETransmGrid%nEnergiesGlobal  * ETransmGrid%nspin * (ik-1)
+      rec1=rec0
 #ifdef MPI
       do ihead=1,nheads-1
-
         rec1=rec1+1
-        read(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads),(sigma_buffer(il)%nchannels,il=1,energygrid1%nLeads)
-
-        do il=1,energygrid1%nLeads
-          call MPI_SEND(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex,ihead,1,inverseheads_comm,MPIerror)
-          call MPI_SEND(sigma_buffer(il)%nchannels,1,MPI_integer,ihead,2,inverseheads_comm,MPIerror)
-        enddo
-
+        read(sigma_io,REC=rec1) rec,nch
+        call MPI_SEND(rec,len,DAT_dcomplex,ihead,1,inverseheads_comm,MPIerror)
+        call MPI_SEND(nch,energygrid1%nLeads,MPI_integer,ihead,2,inverseheads_comm,MPIerror)
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
-
       enddo
 #endif
-
+      read(sigma_io,REC=rec0) rec,nch
       close(sigma_io)
-
-      do il=1,energygrid1%nLeads
-        deallocate(sigma_buffer(il)%sigma)
-      enddo
-      deallocate(sigma_buffer)
-
 #ifdef MPI
     else
-
-      allocate(sigma_buffer(energygrid1%nLeads))
-      do il=1,energygrid1%nLeads
-        call allocate_sigma_single(sigma_buffer(il),energygrid1%leadsTotalDim(il),myhead,0,(0.0_kdp,0.0_kdp),0.0_kdp,0.0_kdp)
-      enddo
-
       do ihead=1,nheads-1
         if(myhead.eq.ihead)then
-
-         do il=1,energygrid1%nLeads
-           call MPI_RECV(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex, 0, 1, inverseheads_comm, istatus, MPIerror)
-           call MPI_RECV(sigma_buffer(il)%nchannels,1,MPI_integer, 0, 2, inverseheads_comm, istatus, MPIerror)
-           energygrid1%sigma(il,1,1,1)%sigma=sigma_buffer(il)%sigma
-           energygrid1%sigma(il,1,1,1)%nchannels=sigma_buffer(il)%nchannels
-         enddo
-
+          call MPI_RECV(rec,len,DAT_dcomplex, 0, 1, inverseheads_comm, istatus, MPIerror)
+          call MPI_RECV(nch,energygrid1%nLeads,MPI_integer, 0, 2, inverseheads_comm, istatus, MPIerror)
         endif
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
       enddo
-
-      do il=1,energygrid1%nLeads
-        deallocate(sigma_buffer(il)%sigma)
-      enddo
-      deallocate(sigma_buffer)
-
 #endif
-
     endif
-
+    pos=0
+    do il=1,energygrid1%nLeads
+      call unpack_sigma_element(rec,pos,energygrid1%sigma(il,1,1,1))
+      energygrid1%sigma(il,1,1,1)%nchannels=nch(il)
+    enddo
+    deallocate(rec,nch)
   end SUBROUTINE read_selfenergies_transmission
 
 
   
   subroutine extractsigma(energygrid1,sigma,ie,ispin,ik)
+    use mSigmaFourier, only: BlochExpandSigma
 
     integer, intent(in) :: ie,ispin,ik
     type(EnergyGridType), intent(inout) :: energygrid1
@@ -2434,7 +2358,13 @@ module mEnergyGrid
 
     if(sigma(1)%InfoSigma==0)then
       do il=1,energygrid1%nLeads
-        sigma(il)%sigma=energygrid1%sigma(il,ie,ispin,iksigma)%sigma
+        if(allocated(energygrid1%sigma(il,ie,ispin,iksigma)%sigmak))then
+          call BlochExpandSigma(energygrid1%sigma(il,ie,ispin,iksigma)%ndiv, &
+            size(energygrid1%sigma(il,ie,ispin,iksigma)%sigmak,1),sigma(il)%n, &
+            energygrid1%sigma(il,ie,ispin,iksigma)%sigmak,sigma(il)%sigma)
+        else
+          sigma(il)%sigma=energygrid1%sigma(il,ie,ispin,iksigma)%sigma
+        endif
       enddo
     elseif(sigma(1)%InfoSigma==1)then
       do il=1,energygrid1%nLeads
@@ -2447,36 +2377,35 @@ module mEnergyGrid
   end subroutine extractsigma
 
   subroutine calculate_and_write_selfenergies(ik,fsigma,energygrid1)
-
     use mMPI_NEGF
-
     integer, intent(in) :: ik
     character(LEN=*), intent(in) ::  fsigma
     type(EnergyGridType), intent(in) :: energygrid1
-
     integer ispin,ie,il
     type(SelfEnergyType), allocatable :: sigmaleads(:)
 
     allocate(sigmaleads(energygrid1%nLeads))
     do il=1,energygrid1%nLeads
-      call allocate_sigma_single(sigmaleads(il), energygrid1%leadsTotalDim(il),myhead, energygrid1%InfoSigma,(0.0D0,0.0D0),0.0D0,0.0D0)
+      call allocate_sigma_single(sigmaleads(il), energygrid1%leadsTotalDim(il),myhead, energygrid1%InfoSigma,(0.0D0,0.0D0),0.0D0,0.0D0, &
+        ndiv=energygrid1%sigma(il,1,1,1)%ndiv)
     enddo
-
     do ie=1,energygrid1%nEnergies
       do ispin=1,energygrid1%nspin
         do il=1,energygrid1%nLeads
-          call single_selfenergy(sigmaleads(il)%sigma,sigmaleads(il)%n,il,ik,ispin,ie,energygrid1)
+          if(allocated(sigmaleads(il)%sigmak))then
+            call single_selfenergy_compact(sigmaleads(il)%sigmak,il,ik,ispin,ie,energygrid1)
+          else
+            call single_selfenergy(sigmaleads(il)%sigma,sigmaleads(il)%n,il,ik,ispin,ie,energygrid1)
+          endif
         enddo
         call write_single_selfenergy(sigmaleads,ik,ispin,ie,energygrid1)
       enddo
     enddo
-
     do il=1,energygrid1%nLeads
-      deallocate(sigmaleads(il)%sigma)
+      if(allocated(sigmaleads(il)%sigma)) deallocate(sigmaleads(il)%sigma)
+      if(allocated(sigmaleads(il)%sigmak)) deallocate(sigmaleads(il)%sigmak)
     enddo
     deallocate(sigmaleads)
-
- 
   end subroutine calculate_and_write_selfenergies
 
 

@@ -35,7 +35,7 @@ negfk_subs.o : negfk_subs.F90 $(SRCDIR)/NEGF/const2.h negfmod.mod sigma.mod mmpi
 UpdateRho.o : UpdateRho.F90 mtypes.mod mmatrixutil.mod mnegfoutput.mod
 
 mselfenergies.mod : SelfEnergies.F90 SelfEnergies.o mtypes.mod msigmafourier.mod mcomputeulr.mod mconstants.mod negfmod.mod msigmamethod1.mod
-SelfEnergies.o : SelfEnergies.F90 mtypes.mod msigmafourier.mod mcomputeulr.mod mconstants.mod negfmod.mod msigmamethod1.mod
+SelfEnergies.o : SelfEnergies.F90 mtypes.mod msigmafourier.mod mcomputeulr.mod mconstants.mod negfmod.mod msigmamethod1.mod mnegfoutput.mod
 
 mboundstates.mod : BoundStates.F90 BoundStates.o $(SRCDIR)/NEGF/const2.h mtypes.mod mmatrixutil.mod mconstants.mod mmpi_negf.mod negfmod.mod monboundstates.mod mselfenergies.mod menergygrid.mod mnegfoutput.mod
 BoundStates.o : BoundStates.F90 $(SRCDIR)/NEGF/const2.h mtypes.mod mmatrixutil.mod mconstants.mod mmpi_negf.mod negfmod.mod monboundstates.mod mselfenergies.mod menergygrid.mod mnegfoutput.mod
@@ -75,7 +75,7 @@ mreaddata.mod : ReadData.F90 ReadData.o mtypes.mod mconstants.mod mmatrixutil.mo
 ReadData.o : ReadData.F90 mtypes.mod mconstants.mod mmatrixutil.mod museful.mod mnegfoutput.mod
 
 menergygrid.mod : EnergyGrid.F90 EnergyGrid.o $(SRCDIR)/NEGF/const2.h mtypes.mod sigma.mod mmatrixutil.mod mconstants.mod mmpi_negf.mod negfmod.mod moninterface.mod mselfenergies.mod global_meshvar.mod mnegfoutput.mod
-EnergyGrid.o : EnergyGrid.F90 $(SRCDIR)/NEGF/const2.h mtypes.mod sigma.mod mmatrixutil.mod mconstants.mod mmpi_negf.mod negfmod.mod moninterface.mod mselfenergies.mod global_meshvar.mod mnegfoutput.mod
+EnergyGrid.o : EnergyGrid.F90 $(SRCDIR)/NEGF/const2.h mtypes.mod sigma.mod mmatrixutil.mod mconstants.mod mmpi_negf.mod negfmod.mod moninterface.mod mselfenergies.mod global_meshvar.mod mnegfoutput.mod msigmafourier.mod
 
 mconstants.mod : Constants.F90 Constants.o 
 Constants.o : Constants.F90 

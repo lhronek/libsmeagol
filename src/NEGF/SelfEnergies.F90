@@ -8,6 +8,7 @@ module mSelfenergies
   
   public :: SelfEnergyGeneral
   public :: SetOptionsSelfEnergies
+  public :: BlochDivisions
   
   integer, allocatable, save :: ndivxy(:,:)
 
@@ -22,8 +23,15 @@ module mSelfenergies
   ndivxy=ndivxy_in
 
   end subroutine SetOptionsSelfEnergies
+
+  function BlochDivisions(il) result(nd)
+    integer, intent(in) :: il
+    integer :: nd(2)
+    nd=1
+    if(allocated(ndivxy)) nd=ndivxy(il,:)
+  end function BlochDivisions
       
-  subroutine SelfEnergyGeneral(side,n,e,h0,h1,s0,s1,sigma,nchan,delta,DoFourier)
+  subroutine SelfEnergyGeneral(side,n,e,h0,h1,s0,s1,sigma,nchan,delta,DoFourier,sigmak)
 
 ! **********************************************************************
 ! Calculates the self-energies, based on the singularity-free scheme,
@@ -39,6 +47,7 @@ module mSelfenergies
   use mSigmaMethod1, only : GetSelfEnergy
   use mSigmaFourier, only : selfenergy_k
   use mComputeULR,   only : PhiS,InitPhiS
+  use mNegfOutput,   only : negf_abort
 
   character(len=1), intent(in) :: side
   integer, intent(in)          :: n
@@ -46,7 +55,8 @@ module mSelfenergies
   real(kdp), intent(in)        :: delta
   complex(kdp), intent(inout)  :: h0(n,n),h1(n,n),s0(n,n),s1(n,n) ! within selfenergy_k these matrices can potentially be changed, therefore intent(inout)
   integer, intent(out)         :: nchan
-  complex(kdp), intent(out)    :: sigma(n,n)
+  complex(kdp), intent(out), optional :: sigma(n,n)
+  complex(kdp), intent(out), optional :: sigmak(:,:,:,:) ! Bloch blocks instead of (or besides) the full matrix
   logical, intent(in)          :: DoFourier 
    
   integer il
@@ -60,9 +70,10 @@ module mSelfenergies
   if(TransmissionMatrix.and.em_Last_SCF_Step) call InitPhiS(PhiS(il),side,ndivxy(il,:),n,e)
 
   if(maxval(ndivxy(il,:))==1)then
+    if(.not.present(sigma)) call negf_abort("SelfEnergyGeneral: the full self-energy output is required without Bloch divisions")
     call GetSelfEnergy(side,n,e,h0,h1,s0,s1,sigma,nchan,delta)
   else
-    call selfenergy_k(side,ndivxy(il,:),n ,e,h0,h1,s0,s1,sigma ,nchan,delta,DoFourier)
+    call selfenergy_k(side,ndivxy(il,:),n ,e,h0,h1,s0,s1,nchan,delta,DoFourier,sigma=sigma,sigmak=sigmak)
   endif
 
   end subroutine SelfEnergyGeneral

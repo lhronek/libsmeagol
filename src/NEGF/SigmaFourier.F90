@@ -6,12 +6,13 @@ module mSigmaFourier
   implicit none
 
   public selfenergy_k
+  public BlochExpandSigma
   public ExpandSstates
   private 
 
   contains 
 
-  SUBROUTINE selfenergy_k(SIDE,ndivxy,n,e,H0,H1,S0,S1,Sigma,nchan,delta,DoFourier)
+  SUBROUTINE selfenergy_k(SIDE,ndivxy,n,e,H0,H1,S0,S1,nchan,delta,DoFourier,sigma,sigmak)
 
     use negfmod, only: overwritehs,TransmissionMatrix,em_Last_SCF_Step, EM_NSPINBlocks
     use mSigmaMethod1, only :check_error_sigma, GetSelfEnergy
@@ -22,7 +23,8 @@ module mSigmaFourier
     integer, intent(in)          :: n
     integer, intent(out)         :: nchan
     complex(kdp),intent(inout)   :: h0(n,n),h1(n,n),s0(n,n),s1(n,n)
-    complex(kdp),intent(out)     :: sigma(n,n)
+    complex(kdp),intent(out),optional :: sigma(n,n)
+    complex(kdp),intent(out),optional :: sigmak(:,:,:,:)
     complex(kdp),intent(in)      :: e
     real(kdp), intent(in)        :: delta
     logical, intent(in)          :: DoFourier
@@ -100,33 +102,12 @@ module mSigmaFourier
       endif
     endif
 !inverse Fourier transform
-    sigma=0.0_kdp
-    do i1=1,ndivxy(1)
-      do i2=1,ndivxy(2)
-        do j1=1,ndivxy(1)
-          do j2=1,ndivxy(2)
-
-            istart=(i1-1) * ns+(i2-1) * ndivxy(1) * ns+1
-            iend=i1 * ns+(i2-1) * ndivxy(1) * ns
-            jstart=(j1-1) * ns+(j2-1) * ndivxy(1) * ns+1
-            jend=j1 * ns+(j2-1) * ndivxy(1) * ns
-
-            do ikx=1,nkx
-              do iky=1,nky
-                eik=exp(-ii * (k(1,ikx,iky)* (j1-i1)+k(2,ikx,iky)* (j2-i2)))
-                sigma(istart:iend,jstart:jend)=sigma(istart:iend,jstart:jend)+ eik * sigmas(:,:,ikx,iky)
-              enddo
-            enddo
-
-          enddo
-        enddo
-      enddo
-    enddo
-    sigma=sigma/(1.0_kdp * nkx*nky)
+    if(present(sigmak)) sigmak=sigmas
+    if(present(sigma)) call BlochExpandSigma(ndivxy,ns,n,sigmas,sigma)
     deallocate(sigmas)
 
 
-    if(checksigma)then
+    if(checksigma.and.present(sigma))then
 
 !inverse Fourier transform
       gf2=0.0_kdp
@@ -179,6 +160,49 @@ module mSigmaFourier
     deallocate(k)
 
   end SUBROUTINE selfenergy_k
+
+! full self-energy of the lead cell from the Bloch blocks at the folding k-points (same arithmetic as the former inline sum)
+  SUBROUTINE BlochExpandSigma(ndivxy,ns,n,sigmas,sigma)
+    integer, intent(in) :: ndivxy(2),ns,n
+    complex(kdp), intent(in) :: sigmas(ns,ns,ndivxy(1),ndivxy(2))
+    complex(kdp), intent(out) :: sigma(n,n)
+    real(kdp), parameter :: pi=3.14159265358979323846264338327950288_kdp
+    complex(kdp), parameter :: ii=(0.0_kdp,1.0_kdp)
+    integer i1,i2,j1,j2,istart,jstart,iend,jend,ikx,iky,nkx,nky
+    real(kdp), allocatable :: k(:,:,:)
+    complex(kdp) :: eik
+
+    nkx=ndivxy(1)
+    nky=ndivxy(2)
+    allocate(k(2,nkx,nky))
+    do ikx=1,nkx
+      do iky=1,nky
+        k(1,ikx,iky)=(2.0_kdp * (ikx-1)) * pi /(1.0_kdp * nkx)
+        k(2,ikx,iky)=(2.0_kdp * (iky-1)) * pi /(1.0_kdp * nky)
+      enddo
+    enddo
+    sigma=0.0_kdp
+    do i1=1,ndivxy(1)
+      do i2=1,ndivxy(2)
+        do j1=1,ndivxy(1)
+          do j2=1,ndivxy(2)
+            istart=(i1-1) * ns+(i2-1) * ndivxy(1) * ns+1
+            iend=i1 * ns+(i2-1) * ndivxy(1) * ns
+            jstart=(j1-1) * ns+(j2-1) * ndivxy(1) * ns+1
+            jend=j1 * ns+(j2-1) * ndivxy(1) * ns
+            do ikx=1,nkx
+              do iky=1,nky
+                eik=exp(-ii * (k(1,ikx,iky)* (j1-i1)+k(2,ikx,iky)* (j2-i2)))
+                sigma(istart:iend,jstart:jend)=sigma(istart:iend,jstart:jend)+ eik * sigmas(:,:,ikx,iky)
+              enddo
+            enddo
+          enddo
+        enddo
+      enddo
+    enddo
+    sigma=sigma/(1.0_kdp * nkx*nky)
+    deallocate(k)
+  end SUBROUTINE BlochExpandSigma
 
   SUBROUTINE HSFourier(n,H0,H1,S0,S1,H0S,H1S,S0S,S1S,ndivxy,ns,nkx,nky,k,overwritehs)
 

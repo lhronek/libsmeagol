@@ -100,6 +100,8 @@ module mTypes
 !> \brief This structure holds the informations related to a single self-energy
   type, public :: SelfEnergyType
     complex(kdp), allocatable:: sigma(:,:) !< the self-energy matrix
+    complex(kdp), allocatable:: sigmak(:,:,:,:) !< Bloch blocks (ns,ns,nkx,nky) of a compact self-energy; the full matrix is their inverse Bloch sum
+    integer :: ndiv(2) = 1 !< Bloch divisions of the lead cell behind this self-energy; (1,1) when the full matrix is stored
     integer :: n !< the dimension of the self-energy
     CHARACTER(LEN=1) :: Side !< the side of the self-energy (either 'L' or 'R')
     complex(kdp) :: e !< energy at which the self-energy is calculated
