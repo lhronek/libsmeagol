@@ -41,6 +41,10 @@ MODDEPS = "lower"
 include $(SMEAGOLHOME)/arch.make
 include $(SMEAGOLHOME)/all.dep
 
+# the generated SIESTA MPI layer calls each external MPI routine with every buffer type: only this object gets the
+# argument-mismatch tolerance option (FCFLAGS_MPI_INTERFACES in arch.make)
+Interfaces.o: FCFLAGS += $(FCFLAGS_MPI_INTERFACES)
+
 # Discover files and directories
 ALL_SRC_DIRS := $(shell find $(SRCDIR) -type d | awk '{printf("%s:",$$1)}')
 

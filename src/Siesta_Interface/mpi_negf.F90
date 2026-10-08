@@ -33,7 +33,18 @@
 module mMPI_NEGF
 
 #ifdef MPI
- use mpi_siesta
+! routine interfaces from the MPI library's module (argument checking); constants from mpi_siesta (mpif.h common
+! blocks, no dependency on the MPI library's module objects)
+ use mpi, only: MPI_Bcast, MPI_Send, MPI_Recv, MPI_Isend, MPI_Irecv, MPI_Bsend, MPI_Wait, &
+                MPI_Reduce, MPI_Allreduce, MPI_Gather, MPI_Scatter, MPI_Barrier, &
+                MPI_Buffer_attach, MPI_Buffer_detach, &
+                MPI_Comm_rank, MPI_Comm_size, MPI_Comm_dup, MPI_Comm_split, MPI_Comm_create, MPI_Comm_free, &
+                MPI_Comm_group, MPI_Group_incl, MPI_Group_free, MPI_Abort, MPI_Finalize
+ use mpi_siesta, only: MPI_integer, MPI_logical, MPI_character, MPI_SUM, MPI_MAX, MPI_STATUS_SIZE, &
+                       MPI_BSEND_OVERHEAD, MPI_COMM_WORLD, MPI_UNDEFINED, DAT_double, DAT_dcomplex
+#ifndef NoMPIInPlace
+ use mpi_siesta, only: mpi_in_place
+#endif
 #endif
 
  use mNegfOutput, only: negf_output_init, negf_output_finalize, negf_abort
@@ -53,6 +64,12 @@ module mMPI_NEGF
  public :: MPI_BSEND_OVERHEAD
  public :: DAT_double
  public :: DAT_dcomplex
+ public :: MPI_COMM_WORLD, MPI_UNDEFINED, MPI_MAX
+ public :: MPI_Bcast, MPI_Send, MPI_Recv, MPI_Isend, MPI_Irecv, MPI_Bsend, MPI_Wait
+ public :: MPI_Reduce, MPI_Allreduce, MPI_Gather, MPI_Scatter, MPI_Barrier
+ public :: MPI_Buffer_attach, MPI_Buffer_detach
+ public :: MPI_Comm_rank, MPI_Comm_size, MPI_Comm_dup, MPI_Comm_split, MPI_Comm_create, MPI_Comm_free
+ public :: MPI_Comm_group, MPI_Group_incl, MPI_Group_free, MPI_Abort, MPI_Finalize
 #endif
 
  public :: create_communicators_negf
