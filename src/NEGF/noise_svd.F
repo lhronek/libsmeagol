@@ -48,13 +48,8 @@
       double complex noise
       double PRECISION delta
       REAL  rnum,inum
-      logical, SAVE :: initseed=.true.
 
-      if(initseed)then
-!        write(12347,*)"initseed"
-        call random_seed
-        initseed=.false.
-      endif
+      call seednoise
 
       do i=1,n
         do j=1,n
@@ -80,7 +75,6 @@
 ! e-mail: runggeri@tcd.ie
 ! *****************************************************************
 
-      use negfmod, only: outinfo
       IMPLICIT NONE
 
       INTEGER n,i,j
@@ -88,13 +82,8 @@
       double complex noise
       double PRECISION delta
       REAL  rnum,inum
-      logical, SAVE :: initseed=.true.
 
-      if(initseed)then
-          if (outinfo) write(12347,*)"initseed"
-        call random_seed
-        initseed=.false.
-      endif
+      call seednoise
 
       do i=1,n
         do j=1,n
@@ -108,6 +97,22 @@
 
 
       end subroutine addnoiser
+
+      subroutine seednoise
+! fixed generator state: the regularisation noise must not depend on
+! the run, the MPI rank or the order of the self-energy evaluations
+      IMPLICIT NONE
+      INTEGER i,nseed
+      INTEGER, ALLOCATABLE :: seed(:)
+
+      call random_seed(size=nseed)
+      allocate(seed(nseed))
+      do i=1,nseed
+        seed(i)=104729*i+7919
+      enddo
+      call random_seed(put=seed)
+      deallocate(seed)
+      end subroutine seednoise
      
 
 
