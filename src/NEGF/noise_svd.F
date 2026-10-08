@@ -600,6 +600,7 @@
       double COMPLEX, ALLOCATABLE :: work(:)
       DOUBLE PRECISION, ALLOCATABLE :: rwork(:)
       DOUBLE COMPLEX,PARAMETER :: alpha=(1.D0,0D0)
+      DOUBLE COMPLEX,PARAMETER :: beta=(0.D0,0D0)
 
 
       nwork=8
@@ -637,9 +638,9 @@
       enddo
 
       call ZGEMM('N', 'N', n, n, n,
-     .            alpha, u, n, sigma, n, 0, k1ob, n)
+     .            alpha, u, n, sigma, n, beta, k1ob, n)
       call ZGEMM('N', 'N', n, n, n,
-     .            alpha, k1ob, n, vt, n, 0, mat, n)
+     .            alpha, k1ob, n, vt, n, beta, mat, n)
 
 
       sigma=0D0
@@ -652,9 +653,9 @@
       enddo
 
       call ZGEMM('N', 'N', n, n, n,
-     .    alpha, DCONJG(TRANSPOSE(vt)), n, sigma, n, 0, k1ob, n)
+     .    alpha, DCONJG(TRANSPOSE(vt)), n, sigma, n, beta, k1ob, n)
       call ZGEMM('N', 'N', n, n, n,
-     .    alpha, k1ob, n, DCONJG(TRANSPOSE(u)), n, 0, matinv, n)
+     .    alpha, k1ob, n, DCONJG(TRANSPOSE(u)), n, beta, matinv, n)
 
 !== end old SVD
 
