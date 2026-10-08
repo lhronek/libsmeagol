@@ -131,6 +131,7 @@ module mTypes
     integer :: InfoSigma !< informations on how the self-energy is stored
     character(len=klw) :: sLabel !< filename to which the standard output is writen
     character(len=klw) :: SigmaSuffix !< filename to which the standard output is writen
+    integer(kind=8), allocatable :: fileid(:) !< identity record of the self-energy file (sigma_file_identity)
 
 !    integer :: nEnergiesSigma !< number of energy points on the node
 !    integer :: nSpinSigma !< number of spins

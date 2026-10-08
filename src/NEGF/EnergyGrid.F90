@@ -74,6 +74,9 @@ module mEnergyGrid
   type(EnergyGridType), public :: EImagGrid
   type(EnergyGridType), public :: ETransmGrid
 
+! format version of the self-energy files (identity record, sigma_file_identity)
+  integer(kind=8), parameter :: sigma_file_version = 1_8
+
 !  type(EnergyPoint), allocatable, save, public :: ErealGlobal(:)
 
 
@@ -209,7 +212,8 @@ module mEnergyGrid
           fsigma=trim(label)//'.V_'//TRIM(ADJUSTL(char_bias))//'.EREAL_SIGMA'
 
           if(ik==1)then
-            call check_file(fsigma,fsigma_exists)
+            call sigma_file_identity(ERealGrid,v,LeadsVoltageShift)
+            call check_sigma_file(fsigma,ERealGrid,fsigma_exists)
           endif
 
           if(storesigmai==0.or.storesigmai==2)then
@@ -324,7 +328,8 @@ module mEnergyGrid
       fsigma=trim(label)//'.V_'//TRIM(ADJUSTL(char_bias))//'.EIMAG_SIGMA'
 !
       if(ik==1)then
-        call check_file(fsigma,fsigma_exists)
+        call sigma_file_identity(EImagGrid,v,LeadsVoltageShift)
+        call check_sigma_file(fsigma,EImagGrid,fsigma_exists)
       endif
 
       if(storesigmai==0.or.storesigmai==2)then
@@ -669,14 +674,11 @@ module mEnergyGrid
         call allocate_sigma_single(sigma_buffer(il),energygrid1%leadsTotalDim(il),myhead,0,(0.0_kdp,0.0_kdp),0.0_kdp,0.0_kdp)
       enddo
 
-      bytes_sigma=0
-      do il=1,energygrid1%nLeads
-        bytes_sigma=bytes_sigma + 16 *  sigma_buffer(il)%n**2
-      enddo
+      bytes_sigma=sigma_file_recl(energygrid1)
 
       OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
 
-      rec1=energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
+      rec1=1+energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
       do ie=1,energygrid1%nEnergies
         do ispin=1,energygrid1%nspin
           rec1=rec1+1
@@ -776,20 +778,18 @@ module mEnergyGrid
         call allocate_sigma_single(sigma_buffer(il),energygrid1%leadsTotalDim(il),myhead,0,(0.0_kdp,0.0_kdp),0.0_kdp,0.0_kdp)
       enddo
 
-      bytes_sigma=0
-      do il=1,energygrid1%nLeads
-        bytes_sigma=bytes_sigma + 16 *  sigma_buffer(il)%n**2
-      enddo
+      bytes_sigma=sigma_file_recl(energygrid1)
 
 
       sigma_io=22349
       if(ik==1)then
         OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
+        call write_sigma_file_header(sigma_io,energygrid1)
       else
         OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
       endif
 
-      rec1=energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
+      rec1=1+energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
       do ie=1,energygrid1%nEnergies
         do ispin=1,energygrid1%nspin
 
@@ -852,6 +852,131 @@ module mEnergyGrid
 
   end SUBROUTINE write_selfenergies
 
+
+! identity of a self-energy file: record 1 holds its length and these values; a file whose record 1 differs
+! from the present grid, leads, bias or broadening is stale (check_sigma_file)
+  subroutine sigma_file_identity(energygrid1,v,LeadsVoltageShift)
+    use mMPI_NEGF
+    use sigma, only: H0_L,H1_L,S0_L,S1_L,H0_R,H1_R,S0_R,S1_R
+    type(EnergyGridType), intent(inout) :: energygrid1
+    real(kdp), intent(in) :: v
+    real(kdp), intent(in) :: LeadsVoltageShift(energygrid1%nLeads)
+    integer il,ie,nid,MPIerror
+    integer(kind=8) hleads
+    real(kdp) hene,henetot
+
+    nid=9+2*energygrid1%nLeads
+    if(allocated(energygrid1%fileid)) deallocate(energygrid1%fileid)
+    allocate(energygrid1%fileid(nid))
+
+! energies and weights: order-independent sum of 30-bit folds, exact in a double, so every head count gives the same value
+    hene=0.0_kdp
+    do ie=1,energygrid1%nEnergies
+      hene=hene+fold30(real(energygrid1%e(ie),kdp))+fold30(aimag(energygrid1%e(ie)))
+      if(allocated(energygrid1%w)) hene=hene+fold30(real(energygrid1%w(ie),kdp))+fold30(aimag(energygrid1%w(ie)))
+    enddo
+    henetot=hene
+#ifdef MPI
+    call MPI_Allreduce(hene,henetot,1,DAT_double,MPI_SUM,inverseheads_comm,MPIerror)
+#endif
+
+! lead Hamiltonians and overlaps (replicated on every process)
+    hleads=0_8
+    if(allocated(H0_L)) call mix64_array(hleads,H0_L,size(H0_L))
+    if(allocated(H1_L)) call mix64_array(hleads,H1_L,size(H1_L))
+    if(allocated(S0_L)) call mix64_array(hleads,S0_L,size(S0_L))
+    if(allocated(S1_L)) call mix64_array(hleads,S1_L,size(S1_L))
+    if(allocated(H0_R)) call mix64_array(hleads,H0_R,size(H0_R))
+    if(allocated(H1_R)) call mix64_array(hleads,H1_R,size(H1_R))
+    if(allocated(S0_R)) call mix64_array(hleads,S0_R,size(S0_R))
+    if(allocated(S1_R)) call mix64_array(hleads,S1_R,size(S1_R))
+
+    energygrid1%fileid(1)=sigma_file_version
+    energygrid1%fileid(2)=energygrid1%nLeads
+    energygrid1%fileid(3)=energygrid1%nEnergiesGlobal
+    energygrid1%fileid(4)=energygrid1%nspin
+    energygrid1%fileid(5)=energygrid1%nk
+    energygrid1%fileid(6)=transfer(v,0_8)
+    energygrid1%fileid(7)=transfer(energygrid1%deltasigma,0_8)
+    energygrid1%fileid(8)=int(henetot,8)
+    energygrid1%fileid(9)=hleads
+    do il=1,energygrid1%nLeads
+      energygrid1%fileid(9+il)=energygrid1%leadsTotalDim(il)
+      energygrid1%fileid(9+energygrid1%nLeads+il)=transfer(LeadsVoltageShift(il),0_8)
+    enddo
+  end subroutine sigma_file_identity
+
+  pure function fold30(x) result(f)
+    real(kdp), intent(in) :: x
+    real(kdp) :: f
+    integer(kind=8) :: b
+    b=transfer(x,b)
+    f=real(ieor(ieor(iand(b,1073741823_8),iand(ishft(b,-30),1073741823_8)),iand(ishft(b,-60),15_8)),kdp)
+  end function fold30
+
+  pure subroutine mix64_array(h,a,n)
+    integer, intent(in) :: n
+    integer(kind=8), intent(inout) :: h
+    complex(kdp), intent(in) :: a(n)
+    integer i
+    do i=1,n
+      h=ieor(ishftc(h,7),transfer(real(a(i),kdp),h))
+      h=ieor(ishftc(h,7),transfer(aimag(a(i)),h))
+    enddo
+  end subroutine mix64_array
+
+! record length: the self-energies of all leads at one energy, at least the identity record
+  function sigma_file_recl(energygrid1) result(recl)
+    type(EnergyGridType), intent(in) :: energygrid1
+    integer :: recl,il
+    recl=0
+    do il=1,energygrid1%nLeads
+      recl=recl+16*energygrid1%leadsTotalDim(il)**2
+    enddo
+    recl=recl+8*energygrid1%nLeads
+    if(allocated(energygrid1%fileid)) recl=max(recl,8*(1+size(energygrid1%fileid)))
+  end function sigma_file_recl
+
+  subroutine write_sigma_file_header(sigma_io,energygrid1)
+    integer, intent(in) :: sigma_io
+    type(EnergyGridType), intent(in) :: energygrid1
+    write(sigma_io,REC=1) int(size(energygrid1%fileid),8),energygrid1%fileid
+  end subroutine write_sigma_file_header
+
+! usable = the file exists and its identity record matches sigma_file_identity; a stale file is deleted
+  subroutine check_sigma_file(fsigma,energygrid1,usable)
+    use mMPI_NEGF
+    use mNegfOutput, only: negf_warn
+    character(LEN=*), intent(in) :: fsigma
+    type(EnergyGridType), intent(in) :: energygrid1
+    logical, intent(out) :: usable
+    integer(kind=8), allocatable :: buf(:)
+    integer nid,ios,MPIerror
+    logical fileexists
+
+    call check_file(fsigma,fileexists)
+    usable=fileexists
+    if(myhead==0.and.fileexists)then
+      nid=size(energygrid1%fileid)
+      allocate(buf(0:nid))
+      buf=0_8
+      open(unit=22349,file=fsigma,status='OLD',form='UNFORMATTED',access='DIRECT',recl=sigma_file_recl(energygrid1),iostat=ios)
+      if(ios==0) read(22349,REC=1,iostat=ios) buf
+      usable=(ios==0).and.(buf(0)==int(nid,8))
+      if(usable) usable=all(buf(1:nid)==energygrid1%fileid)
+      if(usable)then
+        close(22349)
+      else
+        call negf_warn("self-energy file "//trim(fsigma)// &
+          " was written for other leads, energy grid, bias or broadening: ignored and recomputed")
+        close(22349,status='DELETE')
+      endif
+      deallocate(buf)
+    endif
+#ifdef MPI
+    call MPI_Bcast(usable,1,MPI_LOGICAL,0,inverseheads_comm,MPIerror)
+#endif
+  end subroutine check_sigma_file
 
   subroutine check_file(fname,fileexists)
    
@@ -943,20 +1068,18 @@ module mEnergyGrid
 
       sigma_io=22349
 
-      bytes_sigma=0
-      do il=1,energygrid1%nLeads
-        bytes_sigma=bytes_sigma + 16 *  sigma_buffer(il)%n**2
-      enddo
+      bytes_sigma=sigma_file_recl(energygrid1)
 
       if(ik==1)then
         OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
+        call write_sigma_file_header(sigma_io,energygrid1)
       else
         OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
       endif
 
 
 !***********************
-      rec1=energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
+      rec1=1+energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
       rec1=rec1+(ie-1) * nheads *energygrid1%nspin+ispin
 
       write(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
@@ -1024,15 +1147,12 @@ module mEnergyGrid
 
       sigma_io=22349
 
-      bytes_sigma=0
-      do il=1,energygrid1%nLeads
-        bytes_sigma=bytes_sigma + 16 *  sigma_buffer(il)%n**2
-      enddo
+      bytes_sigma=sigma_file_recl(energygrid1)
 
       OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
 
 !***********************
-      rec1=energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
+      rec1=1+energygrid1%nEnergiesGlobal*energygrid1%nspin*(ik-1)
       rec1=rec1+ie * nheads *energygrid1%nspin+ispin
 
 #ifdef MPI
@@ -2104,7 +2224,8 @@ module mEnergyGrid
     fsigma=trim(energygrid1%sLabel)//'.V_'//TRIM(ADJUSTL(char_bias))//trim(energygrid1%SigmaSuffix)
 
     if(ik==1.and.ie==1.and.ispin==1)then
-      call check_file(fsigma,fsigma_exists)
+      call sigma_file_identity(energygrid1,v,LeadsVoltageShift)
+      call check_sigma_file(fsigma,energygrid1,fsigma_exists)
     endif
 
     if(.not.fsigma_exists)then
@@ -2141,29 +2262,29 @@ module mEnergyGrid
         call allocate_sigma_single(sigma_buffer(il),energygrid1%leadsTotalDim(il),myhead,0,(0.0_kdp,0.0_kdp),0.0_kdp,0.0_kdp)
       enddo
 
-      bytes_sigma=0
-      do il=1,energygrid1%nLeads
-        bytes_sigma=bytes_sigma + 16 *  sigma_buffer(il)%n**2
-      enddo
+      bytes_sigma=sigma_file_recl(energygrid1)
 
       sigma_io=22349
       if(ik==1)then
         OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='UNKNOWN', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
+        call write_sigma_file_header(sigma_io,energygrid1)
       else
         OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
       endif
 
-      rec1= (ie-1) * nheads  + ETransmGrid%nEnergiesGlobal  * (ispin-1) + ETransmGrid%nEnergiesGlobal  * ETransmGrid%nspin * (ik-1)  
+      rec1= 1 + (ie-1) * nheads  + ETransmGrid%nEnergiesGlobal  * (ispin-1) + ETransmGrid%nEnergiesGlobal  * ETransmGrid%nspin * (ik-1)  
       rec1=rec1+1
-      write(sigma_io,REC=rec1)(energygrid1%sigma(il,1,1,1)%sigma,il=1,energygrid1%nLeads)
+      write(sigma_io,REC=rec1)(energygrid1%sigma(il,1,1,1)%sigma,il=1,energygrid1%nLeads), &
+        (energygrid1%sigma(il,1,1,1)%nchannels,il=1,energygrid1%nLeads)
 
 #ifdef MPI
       do ihead=1,nheads-1
         do il=1,energygrid1%nLeads
           call MPI_RECV(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex, ihead, 1, inverseheads_comm, istatus, MPIerror)
+          call MPI_RECV(sigma_buffer(il)%nchannels,1,MPI_integer, ihead, 2, inverseheads_comm, istatus, MPIerror)
         enddo
         rec1=rec1+1
-        write(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
+        write(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads),(sigma_buffer(il)%nchannels,il=1,energygrid1%nLeads)
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
       enddo
 #endif
@@ -2185,6 +2306,7 @@ module mEnergyGrid
 
           do il=1,energygrid1%nLeads
             call MPI_SEND(energygrid1%sigma(il,1,1,1)%sigma,energygrid1%sigma(il,1,1,1)%n**2,DAT_dcomplex,0,1,inverseheads_comm,MPIerror)
+            call MPI_SEND(energygrid1%sigma(il,1,1,1)%nchannels,1,MPI_integer,0,2,inverseheads_comm,MPIerror)
           enddo
 
         endif
@@ -2222,21 +2344,19 @@ module mEnergyGrid
         call allocate_sigma_single(sigma_buffer(il),energygrid1%leadsTotalDim(il),myhead,0,(0.0_kdp,0.0_kdp),0.0_kdp,0.0_kdp)
       enddo
 
-      bytes_sigma=0
-      do il=1,energygrid1%nLeads
-        bytes_sigma=bytes_sigma + 16 *  sigma_buffer(il)%n**2
-      enddo
+      bytes_sigma=sigma_file_recl(energygrid1)
 
       OPEN(UNIT=sigma_io,FILE=fsigma,STATUS='OLD', FORM='UNFORMATTED',ACCESS='DIRECT', RECL=bytes_sigma)
 
 !***********************
-      rec1= (ie-1) * nheads  + ETransmGrid%nEnergiesGlobal  * (ispin-1) + ETransmGrid%nEnergiesGlobal  * ETransmGrid%nspin * (ik-1)  
+      rec1= 1 + (ie-1) * nheads  + ETransmGrid%nEnergiesGlobal  * (ispin-1) + ETransmGrid%nEnergiesGlobal  * ETransmGrid%nspin * (ik-1)  
 
       rec1=rec1+1
-      read(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
- 
+      read(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads),(sigma_buffer(il)%nchannels,il=1,energygrid1%nLeads)
+
       do il=1,energygrid1%nLeads
         energygrid1%sigma(il,1,1,1)%sigma=sigma_buffer(il)%sigma
+        energygrid1%sigma(il,1,1,1)%nchannels=sigma_buffer(il)%nchannels
       enddo
 
 
@@ -2244,10 +2364,11 @@ module mEnergyGrid
       do ihead=1,nheads-1
 
         rec1=rec1+1
-        read(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads)
+        read(sigma_io,REC=rec1)(sigma_buffer(il)%sigma,il=1,energygrid1%nLeads),(sigma_buffer(il)%nchannels,il=1,energygrid1%nLeads)
 
         do il=1,energygrid1%nLeads
           call MPI_SEND(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex,ihead,1,inverseheads_comm,MPIerror)
+          call MPI_SEND(sigma_buffer(il)%nchannels,1,MPI_integer,ihead,2,inverseheads_comm,MPIerror)
         enddo
 
         CALL MPI_BARRIER(inverseheads_comm, MPIerror)
@@ -2275,7 +2396,9 @@ module mEnergyGrid
 
          do il=1,energygrid1%nLeads
            call MPI_RECV(sigma_buffer(il)%sigma,sigma_buffer(il)%n**2,DAT_dcomplex, 0, 1, inverseheads_comm, istatus, MPIerror)
+           call MPI_RECV(sigma_buffer(il)%nchannels,1,MPI_integer, 0, 2, inverseheads_comm, istatus, MPIerror)
            energygrid1%sigma(il,1,1,1)%sigma=sigma_buffer(il)%sigma
+           energygrid1%sigma(il,1,1,1)%nchannels=sigma_buffer(il)%nchannels
          enddo
 
         endif
