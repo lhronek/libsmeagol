@@ -64,7 +64,7 @@
       use negfmod
       use mONInterface, only: DistributedInversionActive
       use mTypes
-      use mNegfOutput, only: negf_log_flush, negf_log_unit,
+      use mNegfOutput, only: negf_warn, negf_log_flush, negf_log_unit,
      .    negf_master, negf_out_unit
       use mMatrixUtil
       use mBoundstates
@@ -105,7 +105,7 @@
       double precision, allocatable :: LeadsVoltageShift(:)
       logical :: ldos, CalcIETS
       integer nspinMin
-      DOUBLE PRECISION, DIMENSION (NspinBlocks) :: Icb,tk
+      DOUBLE PRECISION, DIMENSION (NspinBlocks) :: Icb,tk,Icon
       DOUBLE PRECISION, DIMENSION (NspinBlocks) :: Icfinal
       double precision, allocatable :: Rhopdostotk(:,:)
       double precision :: emdostotk(4), weight, wl, wr
@@ -588,6 +588,7 @@
           CALL SYSTEM_CLOCK(sc_0,sc_r,sc_m)
         endif
 
+        Icon=0D0
         if(.not.SkipNonEquilibriumRho.and.v.ne.0.0D0)then
           CALL TIMER('NEGFK_real',1)
 
@@ -612,7 +613,7 @@
      &        NL2,NR2,nk,ik,
      &        V,T,Delta,Ef_Lead,rhobs_general,ematbs_general,
      &        hgeneralp,sgeneralp,rhogeneralp,ematgeneralp,
-     &        iter,ldos,weightrho, rho_real_l, rho_real_r)
+     &        iter,ldos,weightrho, rho_real_l, rho_real_r, Icon)
 
           ! non-equilibrium contribution to density evaluated on real space contour
       DO ISPIN=1,NspinComplexMatrix
@@ -876,6 +877,33 @@
         endif
 
         Icb=0D0
+! order-N: a real-axis sweep of keldyshReal gives T(E) from the lead
+! columns (current_orderN); its density output is scratch here, as the
+! dense path recomputes its own Green's functions in current()
+        if(negfon.and.NspinBlocks<=2.and.
+     &      .not.SkipNonEquilibriumRho.and.v.ne.0.0D0)then
+          if(bs_add)then
+            call negf_warn("EM.OrderN with bound states: the current"//
+     &          " is not computed, 0 is printed")
+          else
+            ALLOCATE(rho_real_l(NspinComplexMatrix,
+     &                          ERealGrid%nEnergies,
+     &                          rhogeneralp(1)%matSparse%nnz))
+            ALLOCATE(rho_real_r(NspinComplexMatrix,
+     &                          ERealGrid%nEnergies,
+     &                          rhogeneralp(1)%matSparse%nnz))
+            rho_real_l=0D0
+            rho_real_r=0D0
+            Icon=0D0
+            call keldyshReal(N12,NspinBlocks,NspinComplexMatrix,
+     &          NL2,NR2,nk,ik,
+     &          V,T,Delta,Ef_Lead,rhobs_general,ematbs_general,
+     &          hgeneralp,sgeneralp,rhogeneralp,ematgeneralp,
+     &          iter,.false.,weightrho,rho_real_l,rho_real_r,Icon)
+            DEALLOCATE(rho_real_l,rho_real_r)
+            Icb=Icon
+          endif
+        endif
         if(.not.negfon.and.mynode_inverse.eq.0.and.NspinBlocks<=2)then
           DO I=1,ERealGrid%nEnergies
             Ei=ERealGrid%e(i)

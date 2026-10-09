@@ -29,7 +29,7 @@
       subroutine keldyshReal(N1,NSpinBlocks,NspinComplexMatrix,NL,NR,nk,
      &    ik,V,T,Delta,ef,rhobs_general,ematbs_general,
      &    hgeneralp,sgeneralp,rhogeneralp,ematgeneralp,
-     &    iter,ldos,weightrho, rho_real_l, rho_real_r)
+     &    iter,ldos,weightrho, rho_real_l, rho_real_r, Icon)
 
 ! *****************************************************************
 ! Calculates the Keldysh Green's function on the real axis
@@ -46,7 +46,7 @@
       use negfmod, only : bs_add, emtimings, emforces, rhobs_delta, 
      .    bs_writetrc, wkmod, bsskip, deltaimag, negfon, itermod,
      .    nbss, bssc, inversion_solver, nprocs_hs, geterrsigma,
-     .    bseskip, bs_method
+     .    bseskip, bs_method, writetk
       use mTypes
       use mNegfOutput, only: negf_log_flush, negf_log_unit
       use mMatrixUtil
@@ -67,6 +67,8 @@
       
       integer, intent(in) :: NSpinBlocks,NspinComplexMatrix
       double precision, intent(in) :: weightrho
+      double precision, intent(inout) :: Icon(NSpinBlocks)
+      double precision :: tkon(NSpinBlocks)
       integer :: N1,NL,NR,nk,ik,II,JJ,ISPIN,is,
      &    INFO,I,inde,indemax,nw3,nw2,iter
         
@@ -635,6 +637,21 @@
 ! Calculate the left Gamma matrix for the left lead in order to calculate
 ! the non-  equilibrium Greens function
 
+! order-N current: the lead columns of this energy give T(E) (the dense
+! path recomputes it in current()); rows 1:NL are on the group master
+            if(negfon.and.NspinBlocks.le.2.and.mynode_inverse.eq.0)then
+              call current_orderN(N1,NL,NR,NspinBlocks,ISPIN,GF_iter1r,
+     &            sigmaleads(1)%sigma,sigmaleads(2)%sigma,fL,fR,
+     &            ERealGrid%w(I),wkmod,Icon,tkon)
+              if(writetk.and.ISPIN.eq.NspinBlocks)then
+                if(NspinBlocks.eq.1)then
+                  write(12347,*)"tk=",Ei,tkon(1),ik
+                else
+                  write(12347,*)"tk=",Ei,tkon(1)+tkon(2),tkon(1),
+     &                tkon(2),ik
+                endif
+              endif
+            endif
             if(ldos)then
               fl=1.0D0
               fr=0.0D0

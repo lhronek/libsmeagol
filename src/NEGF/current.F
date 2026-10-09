@@ -169,3 +169,37 @@
         deallocate(Gamma1_aux,Gamma2_aux,Gamma_L,Gamma_R)
        
 	end subroutine current
+
+      subroutine current_orderN(N1,NL,NR,NSPIN,ISPIN,gfr,sigmaL,
+     &    sigmaR,fL,fR,CONST,wk,Ic,tk)
+! T(E) = Tr[Gamma_L G_LR Gamma_R G_LR^+] from rows 1:NL of the right-lead
+! columns of the order-N inverse; the current formula is that of current()
+      IMPLICIT NONE
+      include "const2.h"
+      INTEGER N1,NL,NR,NSPIN,ISPIN,J,L
+      DOUBLE COMPLEX gfr(N1,NR),sigmaL(NL,NL),sigmaR(NR,NR)
+      DOUBLE COMPLEX fL,fR,CONST
+      DOUBLE PRECISION wk
+      DOUBLE PRECISION, DIMENSION (NSPIN) :: Ic,tk
+      DOUBLE COMPLEX, ALLOCATABLE :: gammaL(:,:),gammaR(:,:),
+     &    b(:,:),c(:,:)
+      DOUBLE COMPLEX tr
+
+      allocate(gammaL(NL,NL),gammaR(NR,NR),b(NL,NR),c(NL,NR))
+      gammaL=zi*(sigmaL-DCONJG(TRANSPOSE(sigmaL)))
+      gammaR=zi*(sigmaR-DCONJG(TRANSPOSE(sigmaR)))
+      CALL ZGEMM('N','N',NL,NR,NR,(1.D0,0.D0),gfr,N1,gammaR,NR,
+     &    (0.D0,0.D0),b,NL)
+      CALL ZGEMM('N','N',NL,NR,NL,(1.D0,0.D0),gammaL,NL,b,NL,
+     &    (0.D0,0.D0),c,NL)
+      tr=(0.D0,0.D0)
+      DO L=1,NR
+        DO J=1,NL
+          tr=tr+c(J,L)*DCONJG(gfr(J,L))
+        ENDDO
+      ENDDO
+      Ic(ISPIN)=Ic(ISPIN)+wk*eh_const*DREAL(CONST*tr*(fL-fR))
+      tk(ISPIN)=DREAL(tr)
+      deallocate(gammaL,gammaR,b,c)
+      end subroutine current_orderN
+
